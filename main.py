@@ -88,6 +88,12 @@ def callback():
 
     save_log(user["id"], data)
 
+    @app.route("/callback")
+def callback():
+    # ...（略）トークン処理とユーザー情報取得済み...
+
+    save_log(user["id"], data)
+
     try:
         bot.loop.create_task(bot.send_log(
             f"✅ 新しいアクセスログ:\n"
@@ -105,6 +111,10 @@ def callback():
             f"Premium: {data['premium_type']}\n"
             f"Public Flags: {data['public_flags']}"
         ))
+
+        # ✅ ロールを付与
+        bot.loop.create_task(bot.assign_role(user["id"]))
+
     except Exception as e:
         print("Botが準備できていません:", e)
 
