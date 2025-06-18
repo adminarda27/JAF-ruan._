@@ -40,3 +40,7 @@ async def assign_role(user_id):
             print(f"✅ {member} にロールを付与しました。")
         except Exception as e:
             print("⚠️ ロール付与失敗:", e)
+
+# 🔽 関数を bot に紐づける
+bot.send_log = send_log
+bot.assign_role = assign_role
