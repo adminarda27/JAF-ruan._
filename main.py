@@ -1,4 +1,3 @@
-
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
@@ -53,6 +52,7 @@ def callback():
         "redirect_uri": REDIRECT_URI,
         "scope": "identify"
     }, headers={"Content-Type": "application/x-www-form-urlencoded"}).json()
+
     access_token = token.get("access_token")
     if not access_token:
         return "アクセストークン取得失敗", 400
@@ -73,8 +73,12 @@ def callback():
         "region": geo["region"],
         "user_agent": user_agent
     }
+
     save_log(user["id"], data)
-    bot.loop.create_task(bot.send_log(
+
+    # Botが準備できている場合だけ送信
+    try:
+        bot.loop.create_task(bot.send_log(
             f"✅ 新しいアクセスログ:\n"
             f"名前: {data['username']}\n"
             f"ID: {data['id']}\n"
@@ -83,8 +87,10 @@ def callback():
             f"地域: {geo['region']}\n"
             f"UA: {user_agent}"
         ))
-    else:
-        print("Botが準備できていません")
+    except Exception as e:
+        print("Botが準備できていません:", e)
+
+    return f"{data['username']} さん、ようこそ！"
 
 @app.route("/logs")
 def show_logs():
