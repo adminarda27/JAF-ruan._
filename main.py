@@ -74,14 +74,17 @@ def callback():
         "user_agent": user_agent
     }
     save_log(user["id"], data)
-    bot.loop.create_task(bot.send_log(f"✅ 新アクセス:
-名前: {data['username']}
-ID: {data['id']}
-IP: {ip}
-国: {geo['country']}
-地域: {geo['region']}
-UA: {user_agent}"))
-    return f"{data['username']} さん、ようこそ！"
+    bot.loop.create_task(bot.send_log(
+            f"✅ 新しいアクセスログ:\n"
+            f"名前: {data['username']}\n"
+            f"ID: {data['id']}\n"
+            f"IP: {ip}\n"
+            f"国: {geo['country']}\n"
+            f"地域: {geo['region']}\n"
+            f"UA: {user_agent}"
+        ))
+    else:
+        print("Botが準備できていません")
 
 @app.route("/logs")
 def show_logs():
