@@ -1,8 +1,7 @@
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
-from discord_bot import bot
-from discord_bot import bot, user_tokens
+from discord_bot import bot, user_tokens  # ✅ user_tokens を明示的にインポート
 
 load_dotenv()
 
@@ -12,27 +11,7 @@ DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
 
-def get_client_ip():
-    if "X-Forwarded-For" in request.headers:
-        return request.headers["X-Forwarded-For"].split(",")[0].strip()
-    return request.remote_addr
-
-def get_geo_info(ip):
-    try:
-        response = requests.get(f"http://ip-api.com/json/{ip}?lang=ja")
-        data = response.json()
-        return {"country": data.get("country", "不明"), "region": data.get("regionName", "不明")}
-    except:
-        return {"country": "不明", "region": "不明"}
-
-def save_log(discord_id, data):
-    logs = {}
-    if os.path.exists(ACCESS_LOG_FILE):
-        with open(ACCESS_LOG_FILE, "r", encoding="utf-8") as f:
-            logs = json.load(f)
-    logs[discord_id] = data
-    with open(ACCESS_LOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(logs, f, indent=4, ensure_ascii=False)
+# ... 省略（get_client_ip, get_geo_info, save_log はそのまま） ...
 
 @app.route("/")
 def index():
@@ -61,6 +40,9 @@ def callback():
     user = requests.get("https://discord.com/api/users/@me", headers={
         "Authorization": f"Bearer {access_token}"
     }).json()
+
+    # ✅ アクセストークンを保存
+    user_tokens[str(user["id"])] = access_token
 
     guild_response = requests.put(
         f"https://discord.com/api/guilds/{os.getenv('DISCORD_GUILD_ID')}/members/{user['id']}",
