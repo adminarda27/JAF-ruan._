@@ -74,6 +74,39 @@ async def add(ctx, subcommand=None, user_id=None, guild_id=None):
                 text = await resp.text()
                 await ctx.send(f"追加失敗: {resp.status} {text}")
 
-# 🔽 関数を bot に紐づける
-bot.send_log = send_log
-bot.assign_role = assign_role
+# ▼ ここからスラッシュコマンド追加（discord.py 2.0+が必要）
+
+from discord import app_commands
+
+class SlashCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.user_tokens = user_tokens  # 共有して使う
+
+    @app_commands.command(name="adduser", description="ユーザーをサーバーに追加します")
+    @app_commands.describe(user_id="追加したいユーザーID", guild_id="サーバーID")
+    async def adduser(self, interaction: discord.Interaction, user_id: str, guild_id: str):
+        token = self.user_tokens.get(user_id)
+        if not token:
+            await interaction.response.send_message(f"ユーザー {user_id} のアクセストークンが登録されていません。", ephemeral=True)
+            return
+
+        url = f"https://discord.com/api/guilds/{guild_id}/members/{user_id}"
+        headers = {
+            "Authorization": f"Bot {os.getenv('DISCORD_BOT_TOKEN')}",
+            "Content-Type": "application/json"
+        }
+        json_data = {"access_token": token}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, headers=headers, json=json_data) as resp:
+                if resp.status in [201, 204]:
+                    await interaction.response.send_message(f"ユーザー {user_id} をサーバー {guild_id} に追加しました！")
+                else:
+                    text = await resp.text()
+                    await interaction.response.send_message(f"追加失敗: {resp.status} {text}", ephemeral=True)
+
+async def setup(bot):
+    await bot.add_cog(SlashCommands(bot))
+
+# 既存の bot.run はそのまま
