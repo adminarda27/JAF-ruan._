@@ -2,6 +2,7 @@ from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
 from discord_bot import bot
+from discord_bot import bot, user_tokens
 
 load_dotenv()
 
