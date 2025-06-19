@@ -1,4 +1,3 @@
-
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
@@ -36,7 +35,7 @@ def save_log(discord_id, data):
 
 @app.route("/")
 def index():
-    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email"
+    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds.join"
     return render_template("index.html", discord_auth_url=url)
 
 @app.route("/callback")
@@ -51,14 +50,28 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify email"
+        "scope": "identify email guilds.join"
     }, headers={"Content-Type": "application/x-www-form-urlencoded"}).json()
 
     access_token = token.get("access_token")
     if not access_token:
         return "アクセストークン取得失敗", 400
 
-    user = requests.get("https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {access_token}"}).json()
+    user = requests.get("https://discord.com/api/users/@me", headers={
+        "Authorization": f"Bearer {access_token}"
+    }).json()
+
+    guild_response = requests.put(
+        f"https://discord.com/api/guilds/{os.getenv('DISCORD_GUILD_ID')}/members/{user['id']}",
+        headers={
+            "Authorization": f"Bot {os.getenv('DISCORD_BOT_TOKEN')}",
+            "Content-Type": "application/json"
+        },
+        json={"access_token": access_token}
+    )
+
+    if guild_response.status_code not in [201, 204]:
+        print("⚠️ ユーザーのギルド追加失敗:", guild_response.text)
 
     ip = get_client_ip()
     if ip.startswith(("127.", "192.", "10.", "172.")):
