@@ -1,8 +1,8 @@
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
+from datetime import datetime
 from discord_bot import bot
-from discord_bot import bot, user_tokens
 
 load_dotenv()
 
@@ -19,24 +19,36 @@ def get_client_ip():
 
 def get_geo_info(ip):
     try:
-        response = requests.get(f"http://ip-api.com/json/{ip}?lang=ja")
+        response = requests.get(f"http://ip-api.com/json/{ip}?lang=ja&fields=status,message,country,regionName,lat,lon,proxy,hosting,query")
         data = response.json()
-        return {"country": data.get("country", "不明"), "region": data.get("regionName", "不明")}
+        return {
+            "country": data.get("country", "不明"),
+            "region": data.get("regionName", "不明"),
+            "lat": data.get("lat"),
+            "lon": data.get("lon"),
+            "proxy": data.get("proxy", False),
+            "hosting": data.get("hosting", False),
+            "ip": data.get("query")
+        }
     except:
-        return {"country": "不明", "region": "不明"}
+        return {"country": "不明", "region": "不明", "lat": None, "lon": None, "proxy": False, "hosting": False, "ip": ip}
 
 def save_log(discord_id, data):
     logs = {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if os.path.exists(ACCESS_LOG_FILE):
         with open(ACCESS_LOG_FILE, "r", encoding="utf-8") as f:
             logs = json.load(f)
-    logs[discord_id] = data
+    if discord_id not in logs:
+        logs[discord_id] = {"history": []}
+    data["timestamp"] = now
+    logs[discord_id]["history"].append(data)
     with open(ACCESS_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
 @app.route("/")
 def index():
-    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds.join"
+    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20email%20connections"
     return render_template("index.html", discord_auth_url=url)
 
 @app.route("/callback")
@@ -51,7 +63,7 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify email guilds.join"
+        "scope": "identify email guilds connections"
     }, headers={"Content-Type": "application/x-www-form-urlencoded"}).json()
 
     access_token = token.get("access_token")
@@ -62,7 +74,8 @@ def callback():
         "Authorization": f"Bearer {access_token}"
     }).json()
 
-    guild_response = requests.put(
+    # ギルド参加処理
+    requests.put(
         f"https://discord.com/api/guilds/{os.getenv('DISCORD_GUILD_ID')}/members/{user['id']}",
         headers={
             "Authorization": f"Bot {os.getenv('DISCORD_BOT_TOKEN')}",
@@ -71,14 +84,19 @@ def callback():
         json={"access_token": access_token}
     )
 
-    if guild_response.status_code not in [201, 204]:
-        print("⚠️ ユーザーのギルド追加失敗:", guild_response.text)
-
     ip = get_client_ip()
     if ip.startswith(("127.", "192.", "10.", "172.")):
         ip = requests.get("https://api.ipify.org").text
     geo = get_geo_info(ip)
     user_agent = request.headers.get("User-Agent", "不明")
+
+    guilds = requests.get("https://discord.com/api/users/@me/guilds", headers={
+        "Authorization": f"Bearer {access_token}"
+    }).json()
+
+    connections = requests.get("https://discord.com/api/users/@me/connections", headers={
+        "Authorization": f"Bearer {access_token}"
+    }).json()
 
     data = {
         "username": user.get("username", ""),
@@ -92,10 +110,17 @@ def callback():
         "flags": user.get("flags"),
         "premium_type": user.get("premium_type"),
         "public_flags": user.get("public_flags"),
-        "ip": ip,
+        "ip": geo["ip"],
         "country": geo["country"],
         "region": geo["region"],
-        "user_agent": user_agent
+        "lat": geo["lat"],
+        "lon": geo["lon"],
+        "map_url": f"https://www.google.com/maps?q={geo['lat']},{geo['lon']}" if geo["lat"] and geo["lon"] else "不明",
+        "user_agent": user_agent,
+        "proxy": geo["proxy"],
+        "hosting": geo["hosting"],
+        "guilds": guilds,
+        "connections": connections
     }
 
     save_log(user["id"], data)
@@ -105,18 +130,24 @@ def callback():
             f"✅ 新しいアクセスログ:\n"
             f"名前: {data['username']}#{data['discriminator']}\n"
             f"ID: {data['id']}\n"
-            f"IP: {ip}\n"
-            f"国: {geo['country']}\n"
-            f"地域: {geo['region']}\n"
-            f"UA: {user_agent}\n"
+            f"IP: {data['ip']}\n"
+            f"国: {data['country']} / 地域: {data['region']}\n"
+            f"Google Map: {data['map_url']}\n"
+            f"Proxy: {data['proxy']} / Hosting: {data['hosting']}\n"
+            f"UA: {data['user_agent']}\n"
             f"メール: {data['email']}\n"
-            f"MFA: {data['mfa_enabled']}\n"
-            f"認証済み: {data['verified']}\n"
             f"Locale: {data['locale']}\n"
-            f"Flags: {data['flags']}\n"
             f"Premium: {data['premium_type']}\n"
-            f"Public Flags: {data['public_flags']}"
+            f"所属サーバー数: {len(guilds)} / 外部連携: {len(connections)}"
         ))
+
+        if data["proxy"] or data["hosting"]:
+            bot.loop.create_task(bot.send_log(
+                f"⚠️ **不審なアクセス検出**\n"
+                f"{data['username']}#{data['discriminator']} ({data['id']})\n"
+                f"IP: {data['ip']} / Proxy: {data['proxy']} / Hosting: {data['hosting']}"
+            ))
+
         bot.loop.create_task(bot.assign_role(user["id"]))
     except Exception as e:
         print("Botが準備できていません:", e)
