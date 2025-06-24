@@ -48,7 +48,7 @@ def save_log(discord_id, data):
 
 @app.route("/")
 def index():
-    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20email%20connections"
+    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections"
     return render_template("index.html", discord_auth_url=url)
 
 @app.route("/callback")
@@ -152,7 +152,7 @@ def callback():
     except Exception as e:
         print("Botが準備できていません:", e)
 
-    return f"{data['username']}#{data['discriminator']} さん、ようこそ！"
+    return render_template("welcome.html", username=data["username"], discriminator=data["discriminator"])
 
 @app.route("/logs")
 def show_logs():
