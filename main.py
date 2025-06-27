@@ -2,8 +2,8 @@ from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
-from discord_bot import bot  # あなたのdiscord_bot.py内のbotオブジェクト
-from user_agents import parse  # User-Agent解析
+from discord_bot import bot
+from user_agents import parse
 
 load_dotenv()
 
@@ -13,10 +13,9 @@ DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")
-REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
+REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")  # 例: https://jaf-ruan.onrender.com/callback
 
 def get_client_ip():
-    # プロキシがあればX-Forwarded-Forの最初のIPを取得
     if "X-Forwarded-For" in request.headers:
         return request.headers["X-Forwarded-For"].split(",")[0].strip()
     return request.remote_addr
@@ -90,13 +89,15 @@ def callback():
         "client_secret": DISCORD_CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": REDIRECT_URI,  # ★生のURL文字列そのまま渡す★
         "scope": "identify email guilds connections"
     }
 
     try:
-        session = requests.Session()
-        res = session.post(token_url, data=data, headers=headers, timeout=10)
+        res = requests.post(token_url, data=data, headers=headers, timeout=10)
+        # エラー時にレスポンス内容もプリント（ログ用）
+        if res.status_code != 200:
+            print(f"Discord token error {res.status_code}: {res.text}")
         res.raise_for_status()
         token = res.json()
     except requests.exceptions.RequestException as e:
@@ -106,13 +107,13 @@ def callback():
     if not access_token:
         return "アクセストークン取得失敗", 400
 
-    # ユーザー情報取得
+    session = requests.Session()
+
     user = session.get("https://discord.com/api/users/@me", headers={
         "Authorization": f"Bearer {access_token}",
         "User-Agent": "Mozilla/5.0"
     }).json()
 
-    # ギルド参加（Botによる招待）
     session.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
         headers={
@@ -122,17 +123,14 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IP取得（ローカルIPの場合は外部取得）
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
     geo = get_geo_info(ip)
 
-    # User-Agent解析
     ua_raw = request.headers.get("User-Agent", "不明")
     ua = parse(ua_raw)
 
-    # ギルド・外部連携取得
     guilds = session.get("https://discord.com/api/users/@me/guilds", headers={
         "Authorization": f"Bearer {access_token}"
     }).json()
