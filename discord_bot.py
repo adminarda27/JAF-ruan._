@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 intents = discord.Intents.default()
-intents.members = True  # メンバー情報取得に必須
+intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -16,7 +16,6 @@ LOG_CHANNEL_ID = int(os.getenv("DISCORD_LOG_CHANNEL_ID", 0))
 GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))
 ROLE_ID = int(os.getenv("DISCORD_ROLE_ID", 0))
 
-# Flask側と共有するアクセストークン保存用辞書
 user_tokens = {}
 
 @bot.event
@@ -28,10 +27,23 @@ async def on_ready():
     except Exception as e:
         print(f"Sync error: {e}")
 
-async def send_log(message):
+async def send_log(content=None, embed=None):
     channel = bot.get_channel(LOG_CHANNEL_ID)
-    if channel:
-        await channel.send(message)
+    if not channel:
+        print("⚠️ ログチャンネルが見つかりません")
+        return
+
+    if embed:
+        embed_obj = discord.Embed(
+            title=embed.get("title", "ログ"),
+            description=embed.get("description", ""),
+            color=0x00ff00
+        )
+        if "thumbnail" in embed and embed["thumbnail"]:
+            embed_obj.set_thumbnail(url=embed["thumbnail"]["url"])
+        await channel.send(embed=embed_obj)
+    elif content:
+        await channel.send(content)
 
 async def assign_role(user_id):
     guild = bot.get_guild(GUILD_ID)
@@ -55,7 +67,6 @@ async def assign_role(user_id):
         except Exception as e:
             print("⚠️ ロール付与失敗:", e)
 
-# スラッシュコマンド /adduser を追加
 @bot.tree.command(name="adduser", description="ユーザーをサーバーに追加します")
 @app_commands.describe(user_id="追加したいユーザーID", guild_id="サーバーID")
 async def adduser(interaction: discord.Interaction, user_id: str, guild_id: str):
@@ -79,6 +90,6 @@ async def adduser(interaction: discord.Interaction, user_id: str, guild_id: str)
                 text = await resp.text()
                 await interaction.response.send_message(f"追加失敗: {resp.status} {text}", ephemeral=True)
 
-# Botに機能を紐づけ（Flaskから呼ぶ用）
+# Flask側で使えるように登録
 bot.send_log = send_log
 bot.assign_role = assign_role
