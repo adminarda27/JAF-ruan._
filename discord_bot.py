@@ -68,7 +68,7 @@ async def assign_role(user_id):
             print("⚠️ ロール付与失敗:", e)
 
 @bot.tree.command(name="adduser", description="ユーザーをサーバーに追加します")
-@app_commands.describe(user_id="追加したいユーザーID", guild_id="サーバーID")
+@discord.app_commands.describe(user_id="追加したいユーザーID", guild_id="サーバーID")
 async def adduser(interaction: discord.Interaction, user_id: str, guild_id: str):
     token = user_tokens.get(user_id)
     if not token:
