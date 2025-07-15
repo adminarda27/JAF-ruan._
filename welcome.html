@@ -1,88 +1,81 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Welcome - 宇宙へようこそ</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron&display=swap');
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Welcome - 宇宙へようこそ</title>
+  <!-- ✅ ファビコンGIFを追加 -->
+  <link rel="icon" type="image/gif" href="https://media.tenor.com/fOADkgCMelIAAAAC/your-name-anime.gif">
 
-  /* 全体背景と文字 */
-  body, html {
-    margin: 0; padding: 0;
-    width: 100%; height: 100%;
-    overflow: hidden;
-    /* 背景を少し暗く変更 */
-    background: radial-gradient(ellipse at bottom, #0d121d 0%, #04050a 100%);
-    font-family: 'Orbitron', sans-serif;
-    color: #a6d0ffcc;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron&display=swap');
 
-  #stars {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: 0;
-    background: transparent;
-  }
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: radial-gradient(ellipse at bottom, #0d121d 0%, #04050a 100%);
+      font-family: 'Orbitron', sans-serif;
+      color: #a6d0ffcc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
 
-  .container {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    background: transparent;
-    padding: 3rem 4rem;
-    border-radius: 25px;
-    box-shadow: none;
-  }
+    #stars {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      background: transparent;
+    }
 
-  /* 囲み用ボックス（色濃く修正済み） */
-  .box {
-    display: inline-block;
-    padding: 2rem 3rem;
-    border-radius: 20px;
-    background: rgba(20, 30, 50, 0.7);
-    box-shadow:
-      0 0 30px rgba(100, 150, 255, 0.4);
-    transform-style: preserve-3d;
-    will-change: transform;
-    transition: transform 0.1s ease-out;
-  }
+    .container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      background: transparent;
+      padding: 3rem 4rem;
+      border-radius: 25px;
+      box-shadow: none;
+    }
 
-  h1 {
-    font-size: 3.8rem;
-    margin: 0 0 1rem 0;
-    color: #87c0ff;
-    text-shadow: 
-      0 0 10px #5eaaffcc,
-      0 0 20px #5eaaffcc,
-      0 0 30px #2a6ed1cc;
-  }
+    .box {
+      display: inline-block;
+      padding: 2rem 3rem;
+      border-radius: 20px;
+      background: rgba(20, 30, 50, 0.7);
+      box-shadow: 0 0 30px rgba(100, 150, 255, 0.4);
+      transform-style: preserve-3d;
+      will-change: transform;
+      transition: transform 0.1s ease-out;
+    }
 
-  .username {
-    font-size: 3rem;
-    font-weight: 900;
-    color: #ffa8f2;
-    text-shadow:
-      0 0 15px #ff93f1,
-      0 0 30px #d95bd1;
-    margin-bottom: 1rem;
-  }
+    h1 {
+      font-size: 3.8rem;
+      margin: 0 0 1rem 0;
+      color: #87c0ff;
+      text-shadow: 0 0 10px #5eaaffcc, 0 0 20px #5eaaffcc, 0 0 30px #2a6ed1cc;
+    }
 
-  p {
-    font-size: 1.3rem;
-    color: #7ea6caaa;
-    letter-spacing: 0.12em;
-    text-shadow:
-      0 0 8px #7ea6caaa;
-  }
-</style>
+    .username {
+      font-size: 3rem;
+      font-weight: 900;
+      color: #ffa8f2;
+      text-shadow: 0 0 15px #ff93f1, 0 0 30px #d95bd1;
+      margin-bottom: 1rem;
+    }
+
+    p {
+      font-size: 1.3rem;
+      color: #7ea6caaa;
+      letter-spacing: 0.12em;
+      text-shadow: 0 0 8px #7ea6caaa;
+    }
+  </style>
 </head>
-<body>
 
+<body>
 <canvas id="stars"></canvas>
 
 <div class="container">
@@ -108,9 +101,7 @@ resize();
 window.addEventListener('resize', resize);
 
 class Star {
-  constructor() {
-    this.reset();
-  }
+  constructor() { this.reset(); }
   reset() {
     this.x = Math.random() * width;
     this.y = Math.random() * height;
@@ -139,9 +130,7 @@ class Star {
 }
 
 class ShootingStar {
-  constructor() {
-    this.reset();
-  }
+  constructor() { this.reset(); }
   reset() {
     this.x = Math.random() * width;
     this.y = Math.random() * height / 2;
@@ -185,45 +174,32 @@ class ShootingStar {
 const stars = [];
 const shootingStars = [];
 
-for(let i=0; i<150; i++) {
-  stars.push(new Star());
-}
-
-for(let i=0; i<3; i++) {
-  shootingStars.push(new ShootingStar());
-}
+for(let i=0; i<150; i++) stars.push(new Star());
+for(let i=0; i<3; i++) shootingStars.push(new ShootingStar());
 
 function animate() {
   ctx.clearRect(0, 0, width, height);
   stars.forEach(star => star.draw());
-  shootingStars.forEach(shootingStar => {
-    if (shootingStar.dead) {
-      shootingStar.reset();
-    }
-    shootingStar.update();
-    shootingStar.draw();
+  shootingStars.forEach(s => {
+    if (s.dead) s.reset();
+    s.update();
+    s.draw();
   });
   requestAnimationFrame(animate);
 }
-
 animate();
 
 const box = document.getElementById('box');
-
 document.addEventListener('mousemove', (e) => {
   const rect = box.getBoundingClientRect();
   const centerX = rect.left + rect.width / 2;
   const centerY = rect.top + rect.height / 2;
-
   const dx = e.clientX - centerX;
   const dy = e.clientY - centerY;
-
   const rotateX = -dy / 20;
   const rotateY = dx / 20;
-
   box.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
 });
 </script>
-
 </body>
 </html>
