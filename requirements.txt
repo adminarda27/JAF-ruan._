@@ -1,6 +1,4 @@
 flask
 requests
 python-dotenv
-discord.py
-gunicorn
 user-agents
