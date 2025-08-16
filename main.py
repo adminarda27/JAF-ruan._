@@ -1,4 +1,3 @@
-
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
@@ -130,7 +129,6 @@ def callback():
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
-    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -159,37 +157,41 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ✅ Embedログ整形
+    # 整理されたEmbedログ送信
     try:
         d = structured_data["discord"]
-        ip = structured_data["ip_info"]
-        ua = structured_data["user_agent"]
+        ip_info = structured_data["ip_info"]
+        ua_info = structured_data["user_agent"]
 
         embed_data = {
             "title": "✅ 新しいアクセスログ",
-            "description": (
-                f"**名前:** {d['username']}#{d['discriminator']}\n"
-                f"**ID:** {d['id']}\n"
-                f"**メール:** {d['email']}\n"
-                f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
-                f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
-                f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
-                f"**UA:** {ua['raw']}\n"
-                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
-                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
-                f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
-            ),
+            "fields": [
+                {"name": "👤 Username", "value": f"{d['username']}#{d['discriminator']}", "inline": True},
+                {"name": "🆔 User ID", "value": d['id'], "inline": True},
+                {"name": "📧 Email", "value": d.get("email", "不明"), "inline": True},
+                {"name": "🌐 IP Address", "value": ip_info['ip'], "inline": True},
+                {"name": "🧭 User Agent", "value": ua_info['raw'], "inline": False},
+                {"name": "✅ Verified", "value": str(d.get("verified", False)), "inline": True},
+                {"name": "🌐 Locale", "value": d.get("locale", "不明"), "inline": True},
+                {"name": "🏅 Premium Type", "value": str(d.get("premium_type", "なし")), "inline": True},
+                {"name": "🚩 Flags", "value": str(d.get("flags", "なし")), "inline": True},
+                {"name": "👥 Public Flags", "value": str(d.get("public_flags", "なし")), "inline": True},
+                {"name": "📍 Location", "value": f"{ip_info['country']} / {ip_info['region']} / {ip_info['city']} / {ip_info['zip']}", "inline": False},
+                {"name": "ISP / AS", "value": f"{ip_info['isp']} / {ip_info['as']}", "inline": True},
+                {"name": "Proxy / Hosting", "value": f"{ip_info['proxy']} / {ip_info['hosting']}", "inline": True},
+                {"name": "Device", "value": f"{ua_info['device']} / OS: {ua_info['os']} / Browser: {ua_info['browser']}", "inline": False},
+                {"name": "📍 Map", "value": f"[Google Map](https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']})", "inline": False}
+            ],
             "thumbnail": {"url": d["avatar_url"]}
         }
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
 
-        if ip["proxy"] or ip["hosting"]:
+        if ip_info["proxy"] or ip_info["hosting"]:
             bot.loop.create_task(bot.send_log(
                 f"⚠️ **不審なアクセス検出**\n"
                 f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
+                f"IP: {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
             ))
 
         bot.loop.create_task(bot.assign_role(d["id"]))
