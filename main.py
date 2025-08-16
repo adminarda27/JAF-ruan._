@@ -129,6 +129,7 @@ def callback():
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
+    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -157,37 +158,38 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # 整理されたEmbedログ送信
+    # ✅ Embedログ整形（完全整理版）
     try:
         d = structured_data["discord"]
-        ip_info = structured_data["ip_info"]
-        ua_info = structured_data["user_agent"]
+        ip = structured_data["ip_info"]
+        ua = structured_data["user_agent"]
 
         embed = {
-    "title": "✅ 新しいアクセスログ",
-    "thumbnail": {"url": d.get("avatar_url")},
-    "fields": [
-        {"name": "👤 Username", "value": f"{d.get('username')}#{d.get('discriminator')}", "inline": True},
-        {"name": "🆔 User ID", "value": d.get("id"), "inline": True},
-        {"name": "📧 Email", "value": d.get("email", "不明"), "inline": False},
-        {"name": "🌐 IP Address", "value": f"{ip.get('ip')} (Proxy: {ip.get('proxy')})", "inline": False},
-        {"name": "🧭 User Agent", "value": ua.get("raw"), "inline": False},
-        {"name": "✅ Verified", "value": str(d.get("verified")), "inline": True},
-        {"name": "🌐 Locale", "value": d.get("locale"), "inline": True},
-        {"name": "🏅 Premium Type", "value": str(d.get("premium_type", "なし")), "inline": True},
-        {"name": "🚩 Flags", "value": str(d.get("flags", 0)), "inline": True},
-        {"name": "👥 Public Flags", "value": str(d.get("public_flags", 0)), "inline": True},
-        {"name": "📍 Map", "value": f"[地図リンク](https://www.google.com/maps?q={ip.get('lat')},{ip.get('lon')})", "inline": False}
-    ]
-}
-bot.loop.create_task(bot.send_log(embed=embed))
+            "title": "✅ 新しいアクセスログ",
+            "thumbnail": {"url": d.get("avatar_url")},
+            "fields": [
+                {"name": "👤 Username", "value": f"{d.get('username')}#{d.get('discriminator')}", "inline": True},
+                {"name": "🆔 User ID", "value": d.get("id"), "inline": True},
+                {"name": "📧 Email", "value": d.get("email", "不明"), "inline": False},
+                {"name": "✅ Verified", "value": str(d.get("verified")), "inline": True},
+                {"name": "🌐 Locale", "value": d.get("locale"), "inline": True},
+                {"name": "🏅 Premium Type", "value": str(d.get("premium_type", "なし")), "inline": True},
+                {"name": "🚩 Flags", "value": str(d.get("flags", 0)), "inline": True},
+                {"name": "👥 Public Flags", "value": str(d.get("public_flags", 0)), "inline": True},
+                {"name": "🌐 IP", "value": f"{ip.get('ip')} (Proxy: {ip.get('proxy')}, Hosting: {ip.get('hosting')})", "inline": False},
+                {"name": "🧭 User Agent", "value": ua.get("raw"), "inline": False},
+                {"name": "📍 Map", "value": f"[地図リンク](https://www.google.com/maps?q={ip.get('lat')},{ip.get('lon')})", "inline": False},
+            ]
+        }
 
+        bot.loop.create_task(bot.send_log(embed=embed))
 
-        if ip_info["proxy"] or ip_info["hosting"]:
+        # 不審アクセス警告
+        if ip["proxy"] or ip["hosting"]:
             bot.loop.create_task(bot.send_log(
                 f"⚠️ **不審なアクセス検出**\n"
                 f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                f"IP: {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
+                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
             ))
 
         bot.loop.create_task(bot.assign_role(d["id"]))
