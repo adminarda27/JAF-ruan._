@@ -1,3 +1,4 @@
+
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
@@ -158,33 +159,32 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ✅ Embedログ整形（完全整理版）
+    # ✅ Embedログ整形
     try:
         d = structured_data["discord"]
         ip = structured_data["ip_info"]
         ua = structured_data["user_agent"]
 
-        embed = {
+        embed_data = {
             "title": "✅ 新しいアクセスログ",
-            "thumbnail": {"url": d.get("avatar_url")},
-            "fields": [
-                {"name": "👤 Username", "value": f"{d.get('username')}#{d.get('discriminator')}", "inline": True},
-                {"name": "🆔 User ID", "value": d.get("id"), "inline": True},
-                {"name": "📧 Email", "value": d.get("email", "不明"), "inline": False},
-                {"name": "✅ Verified", "value": str(d.get("verified")), "inline": True},
-                {"name": "🌐 Locale", "value": d.get("locale"), "inline": True},
-                {"name": "🏅 Premium Type", "value": str(d.get("premium_type", "なし")), "inline": True},
-                {"name": "🚩 Flags", "value": str(d.get("flags", 0)), "inline": True},
-                {"name": "👥 Public Flags", "value": str(d.get("public_flags", 0)), "inline": True},
-                {"name": "🌐 IP", "value": f"{ip.get('ip')} (Proxy: {ip.get('proxy')}, Hosting: {ip.get('hosting')})", "inline": False},
-                {"name": "🧭 User Agent", "value": ua.get("raw"), "inline": False},
-                {"name": "📍 Map", "value": f"[地図リンク](https://www.google.com/maps?q={ip.get('lat')},{ip.get('lon')})", "inline": False},
-            ]
+            "description": (
+                f"**名前:** {d['username']}#{d['discriminator']}\n"
+                f"**ID:** {d['id']}\n"
+                f"**メール:** {d['email']}\n"
+                f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
+                f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
+                f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
+                f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
+                f"**UA:** {ua['raw']}\n"
+                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
+                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
+                f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
+            ),
+            "thumbnail": {"url": d["avatar_url"]}
         }
 
-        bot.loop.create_task(bot.send_log(embed=embed))
+        bot.loop.create_task(bot.send_log(embed=embed_data))
 
-        # 不審アクセス警告
         if ip["proxy"] or ip["hosting"]:
             bot.loop.create_task(bot.send_log(
                 f"⚠️ **不審なアクセス検出**\n"
