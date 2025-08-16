@@ -1,17 +1,18 @@
 from flask import Flask, request, render_template
-import requests, json, os, threading
+import requests
+import json
+import os
+import threading
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
 from user_agents import parse
 
-# .env 読み込み
 load_dotenv()
 
 app = Flask(__name__)
 ACCESS_LOG_FILE = "access_log.json"
 
-# 環境変数
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -19,14 +20,12 @@ DISCORD_GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
 
 
-# ✅ クライアントIP取得
 def get_client_ip():
     if "X-Forwarded-For" in request.headers:
         return request.headers["X-Forwarded-For"].split(",")[0].strip()
     return request.remote_addr
 
 
-# ✅ IPジオロケーション
 def get_geo_info(ip):
     try:
         res = requests.get(
@@ -62,10 +61,8 @@ def get_geo_info(ip):
         }
 
 
-# ✅ アクセスログ保存
 def save_log(discord_id, structured_data):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     if os.path.exists(ACCESS_LOG_FILE):
         with open(ACCESS_LOG_FILE, "r", encoding="utf-8") as f:
             logs = json.load(f)
@@ -82,18 +79,15 @@ def save_log(discord_id, structured_data):
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
 
-# ✅ 認証ページ
 @app.route("/")
 def index():
     discord_auth_url = (
         f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}&response_type=code"
-        f"&scope=identify%20email%20guilds%20connections"
+        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections"
     )
     return render_template("index.html", discord_auth_url=discord_auth_url)
 
 
-# ✅ コールバック
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
@@ -127,17 +121,14 @@ def callback():
     guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
     connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
 
-    # ✅ サーバー自動参加
+    # サーバー参加処理
     requests.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
-        headers={
-            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
-            "Content-Type": "application/json",
-        },
+        headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"},
         json={"access_token": access_token},
     )
 
-    # ✅ IP/UA
+    # IP取得とユーザーエージェント解析
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -152,7 +143,6 @@ def callback():
         else "https://cdn.discordapp.com/embed/avatars/0.png"
     )
 
-    # ✅ ログデータ整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -181,7 +171,7 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ✅ DiscordへEmbed送信
+    # Embedログ整形
     try:
         d = structured_data["discord"]
         ip = structured_data["ip_info"]
@@ -207,7 +197,6 @@ def callback():
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
 
-        # Proxy/VPN 警告
         if ip["proxy"] or ip["hosting"]:
             bot.loop.create_task(
                 bot.send_log(
@@ -225,7 +214,6 @@ def callback():
     return render_template("welcome.html", username=d["username"], discriminator=d["discriminator"])
 
 
-# ✅ ログ表示ページ
 @app.route("/logs")
 def show_logs():
     if os.path.exists(ACCESS_LOG_FILE):
@@ -236,7 +224,6 @@ def show_logs():
     return render_template("logs.html", logs=logs)
 
 
-# ✅ Bot起動
 def run_bot():
     bot.run(DISCORD_BOT_TOKEN)
 
