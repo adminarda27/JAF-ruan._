@@ -2,5 +2,5 @@ flask
 requests
 python-dotenv
 user-agents
-discord.py[without-voice]==2.4.0
+py-cord==2.5.0
 
