@@ -2,4 +2,5 @@ flask
 requests
 python-dotenv
 user-agents
+python-3.11.9
 
