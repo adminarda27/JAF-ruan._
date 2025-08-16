@@ -43,7 +43,7 @@ def get_geo_info(ip):
             "lat": data.get("lat"),
             "lon": data.get("lon"),
             "proxy": data.get("proxy", False),
-            "hosting": data.get("hosting", False),
+            "hosting": data.get("hosting", False)
         }
     except:
         return {
@@ -57,7 +57,7 @@ def get_geo_info(ip):
             "lat": None,
             "lon": None,
             "proxy": False,
-            "hosting": False,
+            "hosting": False
         }
 
 
@@ -102,7 +102,7 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify email guilds connections",
+        "scope": "identify email guilds connections"
     }
 
     try:
@@ -124,25 +124,24 @@ def callback():
     # サーバー参加処理
     requests.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
-        headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"},
-        json={"access_token": access_token},
+        headers={
+            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={"access_token": access_token}
     )
 
     # IP取得とユーザーエージェント解析
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
-
     geo = get_geo_info(ip)
     ua_raw = request.headers.get("User-Agent", "不明")
     ua = parse(ua_raw)
 
-    avatar_url = (
-        f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024"
-        if user.get("avatar")
-        else "https://cdn.discordapp.com/embed/avatars/0.png"
-    )
+    avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
+    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -157,7 +156,7 @@ def callback():
             "flags": user.get("flags"),
             "public_flags": user.get("public_flags"),
             "guilds": guilds,
-            "connections": connections,
+            "connections": connections
         },
         "ip_info": geo,
         "user_agent": {
@@ -165,13 +164,13 @@ def callback():
             "os": ua.os.family,
             "browser": ua.browser.family,
             "device": "Mobile" if ua.is_mobile else "Tablet" if ua.is_tablet else "PC" if ua.is_pc else "Other",
-            "is_bot": ua.is_bot,
-        },
+            "is_bot": ua.is_bot
+        }
     }
 
     save_log(user["id"], structured_data)
 
-    # Embedログ整形
+    # ✅ Embedログ整形
     try:
         d = structured_data["discord"]
         ip = structured_data["ip_info"]
@@ -192,22 +191,17 @@ def callback():
                 f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
                 f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
             ),
-            "thumbnail": {"url": d["avatar_url"]},
+            "thumbnail": {"url": d["avatar_url"]}
         }
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
-
         if ip["proxy"] or ip["hosting"]:
-            bot.loop.create_task(
-                bot.send_log(
-                    f"⚠️ **不審なアクセス検出**\n"
-                    f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                    f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
-                )
-            )
-
+            bot.loop.create_task(bot.send_log(
+                f"⚠️ **不審なアクセス検出**\n"
+                f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
+                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
+            ))
         bot.loop.create_task(bot.assign_role(d["id"]))
-
     except Exception as e:
         print("Embed送信エラー:", e)
 
