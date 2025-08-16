@@ -1,10 +1,10 @@
+
 from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
 from user_agents import parse
-from discord import Embed
 
 load_dotenv()
 
@@ -130,6 +130,7 @@ def callback():
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
+    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -158,63 +159,39 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ⭐ Embed整形
+    # ✅ Embedログ整形
     try:
         d = structured_data["discord"]
         ip = structured_data["ip_info"]
         ua = structured_data["user_agent"]
 
-        embed = Embed(title="✅ 新しいアクセスログ", color=0x3498db)
-        embed.set_thumbnail(url=d["avatar_url"])
-
-        # 👤 Discord情報
-        embed.add_field(
-            name="👤 Discord情報",
-            value=(
+        embed_data = {
+            "title": "✅ 新しいアクセスログ",
+            "description": (
                 f"**名前:** {d['username']}#{d['discriminator']}\n"
                 f"**ID:** {d['id']}\n"
                 f"**メール:** {d['email']}\n"
                 f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                f"**MFA:** {'有効' if d['mfa_enabled'] else '無効'}"
-            ),
-            inline=False
-        )
-
-        # 🌐 IP情報
-        embed.add_field(
-            name="🌐 IP情報",
-            value=(
                 f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
                 f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
                 f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
+                f"**UA:** {ua['raw']}\n"
+                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
+                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
                 f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
             ),
-            inline=False
-        )
-        embed.color = 0x2ecc71
+            "thumbnail": {"url": d["avatar_url"]}
+        }
 
-        # 💻 UA情報
-        embed.add_field(
-            name="💻 ユーザーエージェント",
-            value=(
-                f"**Raw:** {ua['raw']}\n"
-                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
-                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}"
-            ),
-            inline=False
-        )
-        embed.color = 0xe67e22
+        bot.loop.create_task(bot.send_log(embed=embed_data))
 
-        # ⚠️ 不審アクセス
         if ip["proxy"] or ip["hosting"]:
-            embed.add_field(
-                name="⚠️ 不審なアクセス検出",
-                value=f"{d['username']}#{d['discriminator']} / IP: {ip['ip']}",
-                inline=False
-            )
-            embed.color = 0xe74c3c
+            bot.loop.create_task(bot.send_log(
+                f"⚠️ **不審なアクセス検出**\n"
+                f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
+                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
+            ))
 
-        bot.loop.create_task(bot.send_log(embed=embed))
         bot.loop.create_task(bot.assign_role(d["id"]))
 
     except Exception as e:
