@@ -2,5 +2,5 @@ flask
 requests
 python-dotenv
 user-agents
-py-cord==2.5.0
+Python 3.13
 
