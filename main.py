@@ -1,8 +1,6 @@
+
 from flask import Flask, request, render_template
-import requests
-import json
-import os
-import threading
+import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
@@ -47,17 +45,9 @@ def get_geo_info(ip):
         }
     except:
         return {
-            "ip": ip,
-            "country": "不明",
-            "region": "不明",
-            "city": "不明",
-            "zip": "不明",
-            "isp": "不明",
-            "as": "不明",
-            "lat": None,
-            "lon": None,
-            "proxy": False,
-            "hosting": False
+            "ip": ip, "country": "不明", "region": "不明", "city": "不明",
+            "zip": "不明", "isp": "不明", "as": "不明",
+            "lat": None, "lon": None, "proxy": False, "hosting": False
         }
 
 
@@ -104,7 +94,6 @@ def callback():
         "redirect_uri": REDIRECT_URI,
         "scope": "identify email guilds connections"
     }
-
     try:
         res = requests.post(token_url, data=data, headers=headers)
         res.raise_for_status()
@@ -195,13 +184,16 @@ def callback():
         }
 
         bot.loop.create_task(bot.send_log(embed=embed_data))
+
         if ip["proxy"] or ip["hosting"]:
             bot.loop.create_task(bot.send_log(
                 f"⚠️ **不審なアクセス検出**\n"
                 f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
                 f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
             ))
+
         bot.loop.create_task(bot.assign_role(d["id"]))
+
     except Exception as e:
         print("Embed送信エラー:", e)
 
