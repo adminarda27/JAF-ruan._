@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
 from user_agents import parse
+import asyncio
 
 load_dotenv()
 
@@ -70,10 +71,9 @@ def save_log(discord_id, structured_data):
 
 @app.route("/")
 def index():
-    # guilds.join を外して「サーバーに追加」画面を出さない
     discord_auth_url = (
         f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20connections"
+        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections%20guilds.join%20applications.commands"
     )
     return render_template("index.html", discord_auth_url=discord_auth_url)
 
@@ -92,8 +92,9 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify email connections"
+        "scope": "identify email guilds connections"
     }
+
     try:
         res = requests.post(token_url, data=data, headers=headers)
         res.raise_for_status()
@@ -107,7 +108,18 @@ def callback():
 
     headers_auth = {"Authorization": f"Bearer {access_token}"}
     user = requests.get("https://discord.com/api/users/@me", headers=headers_auth).json()
+    guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
     connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
+
+    # サーバー参加処理
+    requests.put(
+        f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
+        headers={
+            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={"access_token": access_token}
+    )
 
     # IP / UA
     ip = get_client_ip()
@@ -132,6 +144,7 @@ def callback():
             "premium_type": user.get("premium_type"),
             "flags": user.get("flags"),
             "public_flags": user.get("public_flags"),
+            "guilds": guilds,
             "connections": connections
         },
         "ip_info": geo,
@@ -146,8 +159,13 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # 非同期で BOT 処理
-    async def send_embed():
+    # 非同期で Bot の処理を呼ぶ
+    bot.loop.create_task(send_embed(structured_data))
+
+    return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
+
+
+async def send_embed(structured_data):
     try:
         d = structured_data["discord"]
         ip_info = structured_data["ip_info"]
@@ -155,7 +173,7 @@ def callback():
 
         embed_data = {
             "title": "✅ 新しいアクセスログ",
-            "color": 0x3498db,  # 青系
+            "color": 0x3498db,
             "fields": [
                 {
                     "name": "👤 Discord情報",
@@ -194,14 +212,13 @@ def callback():
 
         await bot.send_log(embed=embed_data)
 
-        # 不審アクセスは赤系 Embed
         if ip_info["proxy"] or ip_info["hosting"]:
             alert_embed = {
                 "title": "⚠️ 不審アクセス検出",
-                "color": 0xe74c3c,  # 赤系
+                "color": 0xe74c3c,
                 "description": (
                     f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                    f"IP: {ip_info['ip']}\nProxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
+                    f"IP: {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
                 )
             }
             await bot.send_log(embed=alert_embed)
@@ -210,22 +227,6 @@ def callback():
 
     except Exception as e:
         print("Embed送信エラー:", e)
-
-            if ip_info["proxy"] or ip_info["hosting"]:
-                await bot.send_log(
-                    f"⚠️ **不審なアクセス検出**\n"
-                    f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                    f"IP: {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
-                )
-
-            await bot.assign_role(d["id"])
-
-        except Exception as e:
-            print("Embed送信エラー:", e)
-
-    bot.loop.create_task(send_embed())
-
-    return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
 
 
 @app.route("/logs")
@@ -238,9 +239,9 @@ def show_logs():
     return render_template("logs.html", logs=logs)
 
 
-# BOT を別スレッドで起動
+# Botを別スレッドで起動
 def run_bot():
-    bot.run(DISCORD_BOT_TOKEN)
+    asyncio.run(bot.start(DISCORD_BOT_TOKEN))
 
 
 if __name__ == "__main__":
