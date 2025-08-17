@@ -2,9 +2,9 @@ from flask import Flask, request, render_template
 import requests, json, os, threading
 from dotenv import load_dotenv
 from datetime import datetime
-from discord_bot import bot
 from user_agents import parse
 import asyncio
+from discord_bot import bot  # あらかじめ Bot クラスを定義しておくこと
 
 load_dotenv()
 
@@ -84,6 +84,7 @@ def callback():
     if not code:
         return "コードがありません", 400
 
+    # Discord トークン取得
     token_url = "https://discord.com/api/oauth2/token"
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
@@ -114,10 +115,7 @@ def callback():
     # サーバー参加処理
     requests.put(
         f"https://discord.com/api/guilds/{DISCORD_GUILD_ID}/members/{user['id']}",
-        headers={
-            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
-            "Content-Type": "application/json"
-        },
+        headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}", "Content-Type": "application/json"},
         json={"access_token": access_token}
     )
 
@@ -159,74 +157,14 @@ def callback():
 
     save_log(user["id"], structured_data)
 
-    # 非同期で Bot の処理を呼ぶ
-    bot.loop.create_task(send_embed(structured_data))
+    # Bot に Embed 送信タスクを作成
+    async def send_embed_task():
+        from discord_bot import send_embed  # bot 内で send_embed 定義済み
+        await send_embed(structured_data)
+
+    bot.loop.create_task(send_embed_task())
 
     return render_template("welcome.html", username=user["username"], discriminator=user["discriminator"])
-
-
-async def send_embed(structured_data):
-    try:
-        d = structured_data["discord"]
-        ip_info = structured_data["ip_info"]
-        ua_info = structured_data["user_agent"]
-
-        embed_data = {
-            "title": "✅ 新しいアクセスログ",
-            "color": 0x3498db,
-            "fields": [
-                {
-                    "name": "👤 Discord情報",
-                    "value": (
-                        f"**名前:** {d['username']}#{d['discriminator']}\n"
-                        f"**ID:** {d['id']}\n"
-                        f"**メール:** {d['email']}\n"
-                        f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                        f"**MFA:** {d['mfa_enabled']} / Verified: {d['verified']}"
-                    ),
-                    "inline": False
-                },
-                {
-                    "name": "🌐 IP情報",
-                    "value": (
-                        f"**IP:** {ip_info['ip']}\n"
-                        f"**国:** {ip_info['country']} / {ip_info['region']} / {ip_info['city']} / {ip_info['zip']}\n"
-                        f"**ISP:** {ip_info['isp']} / AS: {ip_info['as']}\n"
-                        f"**Proxy:** {ip_info['proxy']} / Hosting: {ip_info['hosting']}\n"
-                        f"📍 [地図リンク](https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']})"
-                    ),
-                    "inline": False
-                },
-                {
-                    "name": "💻 デバイス情報",
-                    "value": (
-                        f"**UA:** {ua_info['raw']}\n"
-                        f"**OS:** {ua_info['os']} / ブラウザ: {ua_info['browser']}\n"
-                        f"**デバイス:** {ua_info['device']} / Bot判定: {ua_info['is_bot']}"
-                    ),
-                    "inline": False
-                }
-            ],
-            "thumbnail": {"url": d["avatar_url"]}
-        }
-
-        await bot.send_log(embed=embed_data)
-
-        if ip_info["proxy"] or ip_info["hosting"]:
-            alert_embed = {
-                "title": "⚠️ 不審アクセス検出",
-                "color": 0xe74c3c,
-                "description": (
-                    f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
-                    f"IP: {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
-                )
-            }
-            await bot.send_log(embed=alert_embed)
-
-        await bot.assign_role(d["id"])
-
-    except Exception as e:
-        print("Embed送信エラー:", e)
 
 
 @app.route("/logs")
@@ -239,11 +177,13 @@ def show_logs():
     return render_template("logs.html", logs=logs)
 
 
-# Botを別スレッドで起動
-def run_bot():
-    asyncio.run(bot.start(DISCORD_BOT_TOKEN))
+def run_flask():
+    app.run(host="0.0.0.0", port=10000)
 
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot, daemon=True).start()
-    app.run(host="0.0.0.0", port=10000)
+    # Flask を別スレッドで起動
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # Bot はメインスレッドで安全に起動
+    bot.run(DISCORD_BOT_TOKEN)
