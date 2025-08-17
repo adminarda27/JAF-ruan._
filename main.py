@@ -148,30 +148,68 @@ def callback():
 
     # 非同期で BOT 処理
     async def send_embed():
-        try:
-            d = structured_data["discord"]
-            ip_info = structured_data["ip_info"]
-            ua_info = structured_data["user_agent"]
+    try:
+        d = structured_data["discord"]
+        ip_info = structured_data["ip_info"]
+        ua_info = structured_data["user_agent"]
 
-            embed_data = {
-                "title": "✅ 新しいアクセスログ",
+        embed_data = {
+            "title": "✅ 新しいアクセスログ",
+            "color": 0x3498db,  # 青系
+            "fields": [
+                {
+                    "name": "👤 Discord情報",
+                    "value": (
+                        f"**名前:** {d['username']}#{d['discriminator']}\n"
+                        f"**ID:** {d['id']}\n"
+                        f"**メール:** {d['email']}\n"
+                        f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
+                        f"**MFA:** {d['mfa_enabled']} / Verified: {d['verified']}"
+                    ),
+                    "inline": False
+                },
+                {
+                    "name": "🌐 IP情報",
+                    "value": (
+                        f"**IP:** {ip_info['ip']}\n"
+                        f"**国:** {ip_info['country']} / {ip_info['region']} / {ip_info['city']} / {ip_info['zip']}\n"
+                        f"**ISP:** {ip_info['isp']} / AS: {ip_info['as']}\n"
+                        f"**Proxy:** {ip_info['proxy']} / Hosting: {ip_info['hosting']}\n"
+                        f"📍 [地図リンク](https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']})"
+                    ),
+                    "inline": False
+                },
+                {
+                    "name": "💻 デバイス情報",
+                    "value": (
+                        f"**UA:** {ua_info['raw']}\n"
+                        f"**OS:** {ua_info['os']} / ブラウザ: {ua_info['browser']}\n"
+                        f"**デバイス:** {ua_info['device']} / Bot判定: {ua_info['is_bot']}"
+                    ),
+                    "inline": False
+                }
+            ],
+            "thumbnail": {"url": d["avatar_url"]}
+        }
+
+        await bot.send_log(embed=embed_data)
+
+        # 不審アクセスは赤系 Embed
+        if ip_info["proxy"] or ip_info["hosting"]:
+            alert_embed = {
+                "title": "⚠️ 不審アクセス検出",
+                "color": 0xe74c3c,  # 赤系
                 "description": (
-                    f"**名前:** {d['username']}#{d['discriminator']}\n"
-                    f"**ID:** {d['id']}\n"
-                    f"**メール:** {d['email']}\n"
-                    f"**Premium:** {d['premium_type']} / Locale: {d['locale']}\n"
-                    f"**IP:** {ip_info['ip']} / Proxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}\n"
-                    f"**国:** {ip_info['country']} / {ip_info['region']} / {ip_info['city']} / {ip_info['zip']}\n"
-                    f"**ISP:** {ip_info['isp']} / AS: {ip_info['as']}\n"
-                    f"**UA:** {ua_info['raw']}\n"
-                    f"**OS:** {ua_info['os']} / ブラウザ: {ua_info['browser']}\n"
-                    f"**デバイス:** {ua_info['device']} / Bot判定: {ua_info['is_bot']}\n"
-                    f"📍 [地図リンク](https://www.google.com/maps?q={ip_info['lat']},{ip_info['lon']})"
-                ),
-                "thumbnail": {"url": d["avatar_url"]}
+                    f"{d['username']}#{d['discriminator']} (ID: {d['id']})\n"
+                    f"IP: {ip_info['ip']}\nProxy: {ip_info['proxy']} / Hosting: {ip_info['hosting']}"
+                )
             }
+            await bot.send_log(embed=alert_embed)
 
-            await bot.send_log(embed=embed_data)
+        await bot.assign_role(d["id"])
+
+    except Exception as e:
+        print("Embed送信エラー:", e)
 
             if ip_info["proxy"] or ip_info["hosting"]:
                 await bot.send_log(
