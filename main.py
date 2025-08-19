@@ -26,10 +26,12 @@ def get_geo_info(ip):
         data = response.json()
         return {
             "country": data.get("country", "不明"),
-            "region": data.get("regionName", "不明")
+            "region": data.get("regionName", "不明"),  # 都道府県
+            "city": data.get("city", "不明"),          # 市区町村
+            "isp": data.get("isp", "不明")            # 通信会社
         }
     except:
-        return {"country": "不明", "region": "不明"}
+        return {"country": "不明", "region": "不明", "city": "不明", "isp": "不明"}
 
 def save_log(discord_id, data):
     if os.path.exists(ACCESS_LOG_FILE):
@@ -92,14 +94,27 @@ def callback():
         "id": user_info["id"],
         "ip": ip,
         "country": geo["country"],
-        "region": geo["region"],
+        "region": geo["region"],   # 都道府県
+        "city": geo["city"],       # 市区町村
+        "isp": geo["isp"],         # 通信会社
         "user_agent": user_agent
     }
 
     save_log(user_info["id"], user_data)
 
+    # Discord Botに送信
     bot.loop.create_task(bot.send_log(
-        f"✅ 新しいアクセスログ:\n```名前: {user_data['username']}\nID: {user_data['id']}\nIP: {ip}\n国: {geo['country']}\n地域: {geo['region']}\nUA: {user_agent}```"
+        f"✅ 新しいアクセスログ:\n"
+        f"```"
+        f"名前: {user_data['username']}\n"
+        f"ID: {user_data['id']}\n"
+        f"IP: {ip}\n"
+        f"国: {geo['country']}\n"
+        f"県: {geo['region']}\n"
+        f"市区町村: {geo['city']}\n"
+        f"通信会社: {geo['isp']}\n"
+        f"UA: {user_agent}"
+        f"```"
     ))
 
     return f"✅ ようこそ {user_data['username']} さん！（ID: {user_data['id']}）"
