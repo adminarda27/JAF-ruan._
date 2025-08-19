@@ -3,3 +3,4 @@ requests
 python-dotenv
 user-agents
 geoip2
+discord.py
